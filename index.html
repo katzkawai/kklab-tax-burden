@@ -4,18 +4,23 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>日本の国民負担率・租税負担率 見える化ダッシュボード</title>
-    <meta name="description" content="日本の国民負担率（租税負担率・社会保障負担率）の推移や最新内訳、個人年収シミュレーターを備えたインタラクティブ可視化ダッシュボード">
-    <meta name="keywords" content="国民負担率, 租税負担率, 社会保障負担率, 潜在的国民負担率, 財務省, 可処分所得, 税金シミュレーター">
-    
+    <meta name="description" content="財務省公表データにもとづく日本の国民負担率（租税負担率・社会保障負担率）の推移（1970〜2026年度）、内訳、OECD加盟国との国際比較、給与所得者の手取り概算シミュレーターを備えたインタラクティブ・ダッシュボード。">
+    <meta name="keywords" content="国民負担率, 租税負担率, 社会保障負担率, 潜在的国民負担率, 財務省, 国際比較, OECD, 手取り, 税金シミュレーター">
+    <meta name="theme-color" content="#0f172a">
+    <link rel="canonical" href="https://katzkawai.org/kklab-tax-burden/">
+
     <!-- Open Graph Tags (GitHub Pages Sharing) -->
     <meta property="og:title" content="日本の国民負担率・租税負担率 見える化ダッシュボード">
-    <meta property="og:description" content="昭和55年(1980年)から直近までの推移、内訳ドーナツチャート、年収シミュレーターで日本の負担率を理解する。">
+    <meta property="og:description" content="1970年度から令和8（2026）年度見通しまでの推移、内訳、OECD 35カ国との比較、年収別の手取りシミュレーターで日本の負担率を理解する。">
     <meta property="og:type" content="website">
+    <meta property="og:url" content="https://katzkawai.org/kklab-tax-burden/">
+    <meta property="og:locale" content="ja_JP">
+    <meta name="twitter:card" content="summary">
 
     <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Chart.js CDN -->
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Chart.js CDN (バージョン固定) -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.1/dist/chart.umd.min.js"></script>
 
     <!-- Google Fonts: Inter & Noto Sans JP -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -50,16 +55,48 @@
             border: 2px solid #ffffff;
             box-shadow: 0 2px 6px rgba(37, 99, 235, 0.4);
         }
+        input[type="range"]::-moz-range-thumb {
+            width: 16px;
+            height: 16px;
+            background: #2563eb;
+            cursor: pointer;
+            border-radius: 50%;
+            border: 2px solid #ffffff;
+            box-shadow: 0 2px 6px rgba(37, 99, 235, 0.4);
+        }
+        /* Segmented toggle buttons */
+        .seg-btn {
+            padding: 0.3rem 0.7rem;
+            font-size: 0.75rem;
+            font-weight: 500;
+            color: #475569;
+            white-space: nowrap;
+            border-radius: 0.5rem;
+            transition: background-color 0.15s ease, color 0.15s ease;
+        }
+        .seg-btn:hover { background-color: #e2e8f0; }
+        .seg-btn[aria-pressed="true"] {
+            background-color: #1e293b;
+            color: #ffffff;
+        }
+        .data-table th, .data-table td {
+            padding: 0.4rem 0.6rem;
+            white-space: nowrap;
+            font-variant-numeric: tabular-nums;
+        }
+        .data-table th, .data-table td { text-align: right; }
+        .data-table th:nth-child(-n+2), .data-table td:nth-child(-n+2) { text-align: left; }
+        .data-table tbody tr:nth-child(even) { background-color: #f8fafc; }
     </style>
 </head>
 <body class="min-h-screen flex flex-col justify-between selection:bg-blue-500 selection:text-white">
 
     <!-- Header -->
-    <header class="gradient-header text-white shadow-lg sticky top-0 z-50">
+    <header class="gradient-header text-white shadow-lg sm:sticky sm:top-0 z-50">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex flex-col sm:flex-row justify-between items-center gap-4">
             <div class="flex items-center space-x-3">
                 <div class="p-2.5 bg-blue-600 rounded-xl shadow-inner flex items-center justify-center">
-                    <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
                     </svg>
                 </div>
@@ -70,12 +107,12 @@
             </div>
             <!-- Header Utility Buttons -->
             <div class="flex items-center space-x-2">
-                <button id="copyUrlBtn" class="px-3 py-1.5 text-xs font-medium bg-slate-700 hover:bg-slate-600 rounded-lg transition-colors flex items-center space-x-1.5 text-slate-200">
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
+                <button id="copyUrlBtn" type="button" class="px-3 py-1.5 text-xs font-medium bg-slate-700 hover:bg-slate-600 rounded-lg transition-colors flex items-center space-x-1.5 text-slate-200">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
                     <span>URL共有</span>
                 </button>
-                <button id="exportCsvBtn" class="px-3 py-1.5 text-xs font-medium bg-blue-600 hover:bg-blue-500 rounded-lg transition-colors flex items-center space-x-1.5 text-white shadow-sm">
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                <button id="exportCsvBtn" type="button" class="px-3 py-1.5 text-xs font-medium bg-blue-600 hover:bg-blue-500 rounded-lg transition-colors flex items-center space-x-1.5 text-white shadow-sm">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
                     <span>推移CSV保存</span>
                 </button>
             </div>
@@ -89,71 +126,72 @@
         <section>
             <div class="flex flex-col sm:flex-row justify-between sm:items-end mb-4">
                 <div>
-                    <h2 class="text-xl font-bold text-slate-800">最新指標概要 (令和6年度 見通しベース)</h2>
-                    <p class="text-sm text-slate-500">国民所得（NI: National Income）基準による推計値</p>
+                    <h2 class="text-xl font-bold text-slate-800">最新指標（<span id="latestYearLabel">令和8年度</span>・<span id="latestStatusLabel">見通し</span>）</h2>
+                    <p class="text-sm text-slate-500">対国民所得（NI: National Income）比。令和6年度までは実績、7年度は実績見込み、8年度は見通し</p>
                 </div>
-                <div class="text-xs text-slate-500 mt-1 sm:mt-0">出典: 財務省公表資料</div>
+                <div class="text-xs text-slate-500 mt-1 sm:mt-0">出典: 財務省「令和8年度の国民負担率」（令和8年3月5日公表）</div>
             </div>
 
             <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 <!-- Card 1 -->
                 <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 stat-card">
                     <div class="flex items-center justify-between text-slate-500 mb-2">
-                        <span class="text-xs font-semibold tracking-wider uppercase text-blue-600">国民負担率 合計</span>
+                        <span class="text-xs font-semibold tracking-wider text-blue-700">国民負担率</span>
                         <span class="p-1.5 bg-blue-50 text-blue-600 rounded-lg">
-                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path></svg>
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path></svg>
                         </span>
                     </div>
                     <div class="flex items-baseline space-x-1">
-                        <span class="text-3xl font-extrabold text-slate-900">45.1</span>
+                        <span class="text-3xl font-extrabold text-slate-900" id="statBurden">45.7</span>
                         <span class="text-lg font-bold text-slate-600">%</span>
                     </div>
-                    <p class="text-xs text-slate-500 mt-2">租税負担率(26.5%) ＋ 社会保障(18.6%)</p>
+                    <p class="text-xs text-slate-500 mt-2" id="statBurdenNote">租税 28.0% ＋ 社会保障 17.6%／前年度比 −0.4pt</p>
+                    <p class="text-xs text-slate-500 mt-1" id="statGdpNote">対GDP比では 32.7%</p>
                 </div>
 
                 <!-- Card 2 -->
                 <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 stat-card">
                     <div class="flex items-center justify-between text-slate-500 mb-2">
-                        <span class="text-xs font-semibold tracking-wider uppercase text-indigo-600">租税負担率</span>
+                        <span class="text-xs font-semibold tracking-wider text-indigo-700">租税負担率</span>
                         <span class="p-1.5 bg-indigo-50 text-indigo-600 rounded-lg">
-                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"></path></svg>
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"></path></svg>
                         </span>
                     </div>
                     <div class="flex items-baseline space-x-1">
-                        <span class="text-3xl font-extrabold text-slate-900">26.5</span>
+                        <span class="text-3xl font-extrabold text-slate-900" id="statTax">28.0</span>
                         <span class="text-lg font-bold text-slate-600">%</span>
                     </div>
-                    <p class="text-xs text-slate-500 mt-2">国税 (16.9%) ＋ 地方税 (9.6%)</p>
+                    <p class="text-xs text-slate-500 mt-2" id="statTaxNote">国税 18.1% ＋ 地方税 9.9%</p>
                 </div>
 
                 <!-- Card 3 -->
                 <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 stat-card">
                     <div class="flex items-center justify-between text-slate-500 mb-2">
-                        <span class="text-xs font-semibold tracking-wider uppercase text-amber-600">社会保障負担率</span>
+                        <span class="text-xs font-semibold tracking-wider text-amber-700">社会保障負担率</span>
                         <span class="p-1.5 bg-amber-50 text-amber-600 rounded-lg">
-                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"></path></svg>
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"></path></svg>
                         </span>
                     </div>
                     <div class="flex items-baseline space-x-1">
-                        <span class="text-3xl font-extrabold text-slate-900">18.6</span>
+                        <span class="text-3xl font-extrabold text-slate-900" id="statSs">17.6</span>
                         <span class="text-lg font-bold text-slate-600">%</span>
                     </div>
-                    <p class="text-xs text-slate-500 mt-2">健康保険・厚生年金・介護保険など</p>
+                    <p class="text-xs text-slate-500 mt-2">年金・医療・介護などの社会保険料（事業主負担分を含む）</p>
                 </div>
 
                 <!-- Card 4 -->
                 <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 stat-card">
                     <div class="flex items-center justify-between text-slate-500 mb-2">
-                        <span class="text-xs font-semibold tracking-wider uppercase text-rose-600">潜在的国民負担率</span>
+                        <span class="text-xs font-semibold tracking-wider text-rose-700">潜在的国民負担率</span>
                         <span class="p-1.5 bg-rose-50 text-rose-600 rounded-lg">
-                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
                         </span>
                     </div>
                     <div class="flex items-baseline space-x-1">
-                        <span class="text-3xl font-extrabold text-slate-900">50.9</span>
+                        <span class="text-3xl font-extrabold text-slate-900" id="statPotential">48.4</span>
                         <span class="text-lg font-bold text-slate-600">%</span>
                     </div>
-                    <p class="text-xs text-slate-500 mt-2">財政赤字分(+5.8%)を加味した将来負担</p>
+                    <p class="text-xs text-slate-500 mt-2" id="statPotentialNote">国民負担率 45.7% ＋ 財政赤字 2.7%</p>
                 </div>
             </div>
         </section>
@@ -163,62 +201,128 @@
             <!-- Long-term Trend Chart (2 cols) -->
             <div class="lg:col-span-2 bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex flex-col justify-between">
                 <div>
-                    <div class="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-slate-100 gap-2">
+                    <div class="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-slate-100 gap-3">
                         <div>
-                            <h3 class="text-lg font-bold text-slate-800">国民負担率の推移（1980年〜現在）</h3>
-                            <p class="text-xs text-slate-500">国税・地方税・社会保障の積み上げと、潜在的国民負担率の折れ線</p>
+                            <h3 class="text-lg font-bold text-slate-800">国民負担率の推移（1970〜2026年度）</h3>
+                            <p class="text-xs text-slate-500">国税・地方税・社会保障負担の積み上げ（対国民所得比）と、潜在的国民負担率・対GDP比の折れ線</p>
                         </div>
-                        <div class="flex items-center space-x-2 text-xs">
-                            <span class="inline-flex items-center text-slate-600">
-                                <span class="w-3 h-3 bg-indigo-600 rounded-sm mr-1"></span>国税
-                            </span>
-                            <span class="inline-flex items-center text-slate-600">
-                                <span class="w-3 h-3 bg-sky-500 rounded-sm mr-1"></span>地方税
-                            </span>
-                            <span class="inline-flex items-center text-slate-600">
-                                <span class="w-3 h-3 bg-amber-500 rounded-sm mr-1"></span>社会保障
-                            </span>
+                        <div class="flex items-center gap-1 bg-slate-100 rounded-xl p-1 self-start sm:self-auto shrink-0" role="group" aria-label="表示期間">
+                            <button type="button" class="seg-btn" data-range="1970" aria-pressed="true">全期間</button>
+                            <button type="button" class="seg-btn" data-range="1990" aria-pressed="false">1990年度〜</button>
+                            <button type="button" class="seg-btn" data-range="2010" aria-pressed="false">2010年度〜</button>
                         </div>
                     </div>
                     <!-- Chart canvas wrapper -->
-                    <div class="relative w-full h-[360px] sm:h-[400px] mt-4">
-                        <canvas id="trendChart"></canvas>
+                    <div class="relative w-full h-[380px] sm:h-[420px] mt-4">
+                        <canvas id="trendChart" role="img" aria-label="国民負担率の推移を示す積み上げ棒グラフと折れ線グラフ。数値はページ下部のデータ表を参照。"></canvas>
                     </div>
+                    <p id="chartFallback" class="hidden mt-4 text-sm text-slate-600">グラフ描画ライブラリを読み込めませんでした。数値はページ下部のデータ表をご覧ください。</p>
                 </div>
-                <div class="mt-4 pt-3 border-t border-slate-100 flex flex-wrap justify-between items-center text-xs text-slate-500">
-                    <span>単位: %（対国民所得比）</span>
-                    <span class="text-rose-600 font-medium">赤色点線: 潜在的国民負担率（財政赤字を含む）</span>
+                <div class="mt-4 pt-3 border-t border-slate-100 flex flex-wrap justify-between items-center gap-x-4 gap-y-1 text-xs text-slate-500">
+                    <span>単位: %。棒は対国民所得比、淡色の棒は実績見込み（令和7年度）・見通し（令和8年度）</span>
+                    <span>赤の破線: 潜在的国民負担率（国民負担率＋財政赤字）</span>
                 </div>
             </div>
 
-            <!-- Breakdown Donut Chart (1 col) -->
+            <!-- Breakdown (1 col) -->
             <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex flex-col justify-between">
                 <div>
                     <div class="pb-4 border-b border-slate-100">
-                        <h3 class="text-lg font-bold text-slate-800">国民所得の内訳構造</h3>
-                        <p class="text-xs text-slate-500">所得全体（100%）に占める負担と手残り</p>
+                        <h3 class="text-lg font-bold text-slate-800">国民負担率の内訳</h3>
+                        <p class="text-xs text-slate-500">令和8年度見通し 45.7% は何で構成されるか（対国民所得比）</p>
                     </div>
-                    <div class="relative w-full h-[280px] sm:h-[300px] mt-4 flex items-center justify-center">
-                        <canvas id="breakdownChart"></canvas>
-                    </div>
+                    <div id="breakdownList" class="mt-5 space-y-4"></div>
                 </div>
-                <div class="mt-4 pt-4 border-t border-slate-100 space-y-2 text-xs text-slate-600">
-                    <div class="flex justify-between items-center">
-                        <span class="flex items-center"><span class="w-2.5 h-2.5 rounded-full bg-emerald-500 mr-2"></span>国民手残り (可処分)</span>
-                        <span class="font-semibold text-slate-800">54.9%</span>
+                <div class="mt-5 pt-4 border-t border-slate-100 space-y-2 text-xs text-slate-600">
+                    <div class="flex items-center gap-4">
+                        <span class="flex items-center"><span class="w-2.5 h-2.5 rounded-sm bg-indigo-700 mr-1.5"></span>租税（計 28.0%）</span>
+                        <span class="flex items-center"><span class="w-2.5 h-2.5 rounded-sm bg-amber-500 mr-1.5"></span>社会保障負担（17.6%）</span>
                     </div>
-                    <div class="flex justify-between items-center">
-                        <span class="flex items-center"><span class="w-2.5 h-2.5 rounded-full bg-indigo-600 mr-2"></span>国税負担</span>
-                        <span class="font-semibold text-slate-800">16.9%</span>
-                    </div>
-                    <div class="flex justify-between items-center">
-                        <span class="flex items-center"><span class="w-2.5 h-2.5 rounded-full bg-sky-500 mr-2"></span>地方税負担</span>
-                        <span class="font-semibold text-slate-800">9.6%</span>
-                    </div>
-                    <div class="flex justify-between items-center">
-                        <span class="flex items-center"><span class="w-2.5 h-2.5 rounded-full bg-amber-500 mr-2"></span>社会保障負担</span>
-                        <span class="font-semibold text-slate-800">18.6%</span>
-                    </div>
+                    <p class="text-slate-500 leading-relaxed">法人が納める税や消費税も含むため、個人の給与から引かれる割合とは一致しません。四捨五入の関係で内訳の合計は総計と一致しないことがあります。</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- International Comparison -->
+        <section class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-slate-100 gap-3">
+                <div>
+                    <h3 class="text-lg font-bold text-slate-800">国際比較（OECD加盟35カ国・2023年）</h3>
+                    <p class="text-xs text-slate-500" id="intlSubtitle">対国民所得比。日本は35カ国中26位</p>
+                </div>
+                <div class="flex items-center gap-1 bg-slate-100 rounded-xl p-1 self-start sm:self-auto shrink-0" role="group" aria-label="比率の分母">
+                    <button type="button" class="seg-btn" data-intl="ni" aria-pressed="true">対国民所得比</button>
+                    <button type="button" class="seg-btn" data-intl="gdp" aria-pressed="false">対GDP比</button>
+                </div>
+            </div>
+            <div class="relative w-full mt-4" id="intlChartWrap" style="height: 840px;">
+                <canvas id="intlChart" role="img" aria-label="OECD加盟35カ国の国民負担率を比較する横棒グラフ。数値は下の表を参照。"></canvas>
+            </div>
+            <p class="mt-3 text-xs text-slate-500 leading-relaxed">
+                * ノルウェーは2022年、トルコは2020年の値。日本は2023年度実績。オーストラリア、コロンビア、アイスランドはデータが取得できないため対象外。
+                ルクセンブルクやアイルランドは国外へ流出する所得が大きく、GDPと国民所得の差が大きいため、分母の取り方で順位が大きく変わります。
+            </p>
+
+            <details class="mt-4 group">
+                <summary class="cursor-pointer text-sm font-medium text-blue-700 hover:text-blue-900">35カ国の数値を表で見る</summary>
+                <div class="mt-3 overflow-x-auto">
+                    <table class="data-table w-full text-xs text-slate-700" id="intlTable"></table>
+                </div>
+            </details>
+
+            <div class="mt-6 pt-5 border-t border-slate-100">
+                <h4 class="font-bold text-slate-800 text-sm mb-1">主要国の潜在的国民負担率</h4>
+                <p class="text-xs text-slate-500 mb-3">国民負担率に財政赤字（対国民所得比）を加えた値。括弧内は対GDP比</p>
+                <div class="overflow-x-auto">
+                    <table class="data-table w-full text-xs text-slate-700" id="majorTable"></table>
+                </div>
+                <p class="mt-2 text-xs text-slate-500 leading-relaxed">財政収支は一般政府（中央政府・地方政府・社会保障基金）ベース。ただし日本は社会保障基金を、米国は社会保障年金信託基金を含まない。</p>
+            </div>
+        </section>
+
+        <!-- Knowledge Base & Explanations -->
+        <section class="space-y-4">
+            <h3 class="text-xl font-bold text-slate-800">国民負担率を正しく読むための4つのポイント</h3>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <!-- Info Card 1 -->
+                <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+                    <div class="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold text-lg mb-3">1</div>
+                    <h4 class="font-bold text-slate-800 mb-2">分母は国民所得（NI）— 対GDP比とは水準が違う</h4>
+                    <p class="text-sm text-slate-600 leading-relaxed">
+                        財務省が公表する「国民負担率」の分母は<strong>国民所得（NI）</strong>です。国民所得は、GDPから固定資本減耗（減価償却に相当）と間接税（消費税など。補助金を差し引いた純額）を除き、海外からの純所得を加えたもので、GDPの7割強の大きさです。分母が小さいぶん、同じ負担額でも比率は高く出ます。<br><br>
+                        令和8年度見通しは対国民所得比で45.7%、<strong>対GDP比では32.7%</strong>です。国際比較（2023年）では、対国民所得比で日本はOECD加盟35カ国中26位。フランス（64.8%）やドイツ（53.4%）より低く、米国（34.2%）より高い水準です。
+                    </p>
+                </div>
+
+                <!-- Info Card 2 -->
+                <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+                    <div class="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center font-bold text-lg mb-3">2</div>
+                    <h4 class="font-bold text-slate-800 mb-2">上昇の主因は社会保障負担</h4>
+                    <p class="text-sm text-slate-600 leading-relaxed">
+                        国民負担率は<strong>租税負担率（国税＋地方税）</strong>と<strong>社会保障負担率（年金・医療・介護などの社会保険料）</strong>の合計です。<br><br>
+                        昭和55（1980）年度から令和8（2026）年度見通しまでに、国民負担率は30.5%から45.7%へ約15ポイント上昇しました。このうち社会保障負担率は8.8%から17.6%へ倍増（+8.8ポイント）し、租税負担率の上昇（21.7%→28.0%、+6.3ポイント）を上回っています。高齢化に伴う社会保険料の増加が最大の押し上げ要因です。
+                    </p>
+                </div>
+
+                <!-- Info Card 3 -->
+                <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+                    <div class="w-10 h-10 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center font-bold text-lg mb-3">3</div>
+                    <h4 class="font-bold text-slate-800 mb-2">「潜在的国民負担率」は財政赤字を加えた指標</h4>
+                    <p class="text-sm text-slate-600 leading-relaxed">
+                        国民負担率に、国と地方の<strong>単年度の財政赤字</strong>（対国民所得比）を加えた指標です。赤字分は現在の世代が負担せず将来世代に先送りしているとみなせるため、「潜在的な負担」と呼ばれます。加えるのは国債残高（ストック）ではなく、毎年度の赤字（フロー）である点に注意が必要です。<br><br>
+                        コロナ対策で赤字が膨らんだ令和2（2020）年度に過去最高の62.6%を記録しました。令和6年度実績は50.3%、令和8年度見通しは48.4%です。
+                    </p>
+                </div>
+
+                <!-- Info Card 4 -->
+                <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+                    <div class="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold text-lg mb-3">4</div>
+                    <h4 class="font-bold text-slate-800 mb-2">「給料の46%が引かれる」という意味ではない</h4>
+                    <p class="text-sm text-slate-600 leading-relaxed">
+                        国民負担率は国全体のマクロ指標で、個人の手取り率ではありません。分子には<strong>法人税、消費税、社会保険料の事業主負担分</strong>など、個人が給与から直接支払わないものが含まれ、分母の国民所得にも企業の所得が含まれます。<br><br>
+                        また、負担した税・保険料は年金・医療・介護・教育などの給付や公共サービスとして国民に戻ってきます。個人の給与に対する負担は世帯の状況で大きく異なるため、下のシミュレーターで確かめてみてください。
+                    </p>
                 </div>
             </div>
         </section>
@@ -226,12 +330,12 @@
         <!-- Personal Salary Simulator Section -->
         <section class="bg-gradient-to-r from-blue-900 to-indigo-900 rounded-3xl p-6 sm:p-8 text-white shadow-xl">
             <div class="max-w-3xl mb-6">
-                <span class="bg-blue-500 text-white text-xs font-semibold px-2.5 py-1 rounded-full uppercase tracking-wider">シミュレーター</span>
-                <h3 class="text-xl sm:text-2xl font-bold mt-2">給与所得者の負担概算シミュレーター</h3>
-                <p class="text-sm text-blue-200 mt-1">あなたの年収（額面）に対する所得税・住民税・社会保険料の控除概算と手取り率を体験計算できます。</p>
+                <span class="bg-blue-500 text-white text-xs font-semibold px-2.5 py-1 rounded-full tracking-wider">シミュレーター</span>
+                <h3 class="text-xl sm:text-2xl font-bold mt-2">給与所得者の負担概算シミュレーター（令和8年）</h3>
+                <p class="text-sm text-blue-200 mt-1">年収（額面）に対する所得税・住民税・社会保険料の概算と手取り率を、令和8（2026）年の税制・保険料率で試算します。</p>
             </div>
 
-            <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
                 <!-- Slider Controls (Left) -->
                 <div class="lg:col-span-6 space-y-6">
                     <div>
@@ -240,117 +344,129 @@
                             <span class="text-2xl font-black text-amber-300" id="salaryDisplay">600 万円</span>
                         </div>
                         <input id="salaryRange" type="range" min="200" max="2000" step="20" value="600" class="w-full h-2.5 bg-blue-950/60 rounded-lg appearance-none cursor-pointer">
-                        <div class="flex justify-between text-[11px] text-blue-300 mt-1">
-                            <span>200万</span>
-                            <span>600万</span>
-                            <span>1,000万</span>
-                            <span>1,500万</span>
-                            <span>2,000万</span>
+                        <div class="relative h-4 text-[11px] text-blue-300 mt-1" id="salaryTicks" aria-hidden="true"></div>
+                    </div>
+
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                            <label for="spouseSelect" class="text-xs text-blue-200 block mb-1">配偶者控除</label>
+                            <select id="spouseSelect" class="w-full bg-blue-950/80 border border-blue-700 text-white text-sm rounded-xl px-3 py-2 focus:ring-2 focus:ring-blue-400 outline-none">
+                                <option value="0">なし（単身・共働きなど）</option>
+                                <option value="1">あり（配偶者の給与年収136万円以下）</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label for="ageSelect" class="text-xs text-blue-200 block mb-1">本人の年齢</label>
+                            <select id="ageSelect" class="w-full bg-blue-950/80 border border-blue-700 text-white text-sm rounded-xl px-3 py-2 focus:ring-2 focus:ring-blue-400 outline-none">
+                                <option value="under40">40歳未満（介護保険料なし）</option>
+                                <option value="over40">40〜64歳（介護保険料あり）</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label for="dependentsSelect" class="text-xs text-blue-200 block mb-1">扶養親族（16〜18歳・23〜69歳）</label>
+                            <select id="dependentsSelect" class="w-full bg-blue-950/80 border border-blue-700 text-white text-sm rounded-xl px-3 py-2 focus:ring-2 focus:ring-blue-400 outline-none">
+                                <option value="0">0人</option>
+                                <option value="1">1人</option>
+                                <option value="2">2人</option>
+                                <option value="3">3人</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label for="specialDependentsSelect" class="text-xs text-blue-200 block mb-1">特定扶養親族（19〜22歳）</label>
+                            <select id="specialDependentsSelect" class="w-full bg-blue-950/80 border border-blue-700 text-white text-sm rounded-xl px-3 py-2 focus:ring-2 focus:ring-blue-400 outline-none">
+                                <option value="0">0人</option>
+                                <option value="1">1人</option>
+                                <option value="2">2人</option>
+                                <option value="3">3人</option>
+                            </select>
                         </div>
                     </div>
 
-                    <div class="grid grid-cols-2 gap-4">
-                        <div>
-                            <label class="text-xs text-blue-200 block mb-1">扶養家族（配偶者・子など）</label>
-                            <select id="dependentsSelect" class="w-full bg-blue-950/80 border border-blue-700 text-white text-sm rounded-xl px-3 py-2 focus:ring-2 focus:ring-blue-400 outline-none">
-                                <option value="0">単身（0人）</option>
-                                <option value="1">1人（配偶者など）</option>
-                                <option value="2">2人</option>
-                                <option value="3">3人以上</option>
-                            </select>
-                        </div>
-                        <div>
-                            <label class="text-xs text-blue-200 block mb-1">年齢区分</label>
-                            <select id="ageSelect" class="w-full bg-blue-950/80 border border-blue-700 text-white text-sm rounded-xl px-3 py-2 focus:ring-2 focus:ring-blue-400 outline-none">
-                                <option value="under40">40歳未満（介護保険なし）</option>
-                                <option value="over40">40歳以上（介護保険あり）</option>
-                            </select>
-                        </div>
-                    </div>
-                    
-                    <p class="text-[11px] text-blue-300 leading-relaxed">
-                        ※ 給与所得控除、基礎控除、標準的な社会保険料率（約15%負担）を考慮した簡易モデルです。生命保険控除や住宅ローン控除等は考慮していません。
-                    </p>
+                    <details class="text-[11px] text-blue-200 leading-relaxed">
+                        <summary class="cursor-pointer text-xs text-blue-100 font-medium">計算の前提（クリックで表示）</summary>
+                        <ul class="list-disc pl-4 mt-2 space-y-1">
+                            <li>令和8（2026）年の給与収入に対する概算です。所得税は令和8年分（基礎控除・給与所得控除の引上げと令和8・9年分の特例を反映、復興特別所得税を含む）、住民税はその所得に対して翌年度（令和9年度）に課税される額（所得割10%＋均等割・森林環境税5,000円、調整控除を反映）です。</li>
+                            <li>社会保険料は令和8年度の料率（協会けんぽ全国平均9.90%、介護保険1.62%、子ども・子育て支援金0.23%、厚生年金18.3%をいずれも労使折半、雇用保険は一般の事業で労働者0.5%）を通年で適用しています。賞与はなく年収を12等分した月給とみなし、標準報酬月額の上限（健康保険139万円、厚生年金65万円）を反映しています。</li>
+                            <li>年収約665万円（合計所得489万円）を超えると基礎控除の上乗せ特例が縮小するため、所得税額が不連続に増えます。</li>
+                            <li>16歳未満の子は扶養控除の対象外です（人数に含めないでください）。配偶者特別控除、所得金額調整控除、生命保険料控除、iDeCo、住宅ローン控除、ふるさと納税、住民税の非課税限度額などは考慮していません。</li>
+                            <li>消費税などの間接税は含みません。実際の金額は勤務先の健康保険、居住地、賞与の有無などで変わります。</li>
+                        </ul>
+                    </details>
                 </div>
 
                 <!-- Calculation Result Card (Right) -->
-                <div class="lg:col-span-6 bg-white/10 backdrop-blur-md rounded-2xl p-6 border border-white/20">
+                <div class="lg:col-span-6 bg-white/10 backdrop-blur-md rounded-2xl p-6 border border-white/20" aria-live="polite">
                     <div class="text-center sm:text-left mb-4">
-                        <span class="text-xs text-blue-200">概算手取り額（可処分所得）</span>
+                        <span class="text-xs text-blue-200">概算手取り額（年額）</span>
                         <div class="text-3xl sm:text-4xl font-black text-white mt-1">
-                            約 <span id="takeHomeSalary" class="text-emerald-400">465</span> 万円
-                            <span class="text-sm font-normal text-blue-200 ml-1">（手取り率 <span id="takeHomeRatio">77.5</span>%）</span>
+                            約 <span id="takeHomeSalary" class="text-emerald-400">466</span> 万円
+                            <span class="block sm:inline text-sm font-normal text-blue-200 sm:ml-1 mt-1 sm:mt-0">（手取り率 <span id="takeHomeRatio">77.7</span>%）</span>
                         </div>
                     </div>
 
+                    <!-- Composition bar -->
+                    <div class="flex w-full h-3 gap-0.5 mb-4" id="compositionBar" role="img" aria-label="額面年収の内訳">
+                        <div id="barNet" class="bg-emerald-400 rounded-l-full" style="width: 77.7%"></div>
+                        <div id="barIncomeTax" class="bg-indigo-400" style="width: 2.5%"></div>
+                        <div id="barResidentTax" class="bg-sky-300" style="width: 5.1%"></div>
+                        <div id="barSocial" class="bg-amber-400 rounded-r-full" style="width: 14.7%"></div>
+                    </div>
+
                     <div class="space-y-3 pt-3 border-t border-white/15">
-                        <div class="flex justify-between text-sm">
+                        <div class="flex justify-between gap-3 text-sm">
                             <span class="text-blue-200 flex items-center">
-                                <span class="w-2.5 h-2.5 rounded-full bg-indigo-400 mr-2"></span>所得税（国税）概算
+                                <span class="w-2.5 h-2.5 rounded-full bg-indigo-400 mr-2"></span>所得税（国税）
                             </span>
-                            <span class="font-bold" id="incomeTaxDisplay">約 20 万円</span>
+                            <span class="font-bold whitespace-nowrap" id="incomeTaxDisplay">約 14.9 万円</span>
                         </div>
-                        <div class="flex justify-between text-sm">
+                        <div class="flex justify-between gap-3 text-sm">
                             <span class="text-blue-200 flex items-center">
-                                <span class="w-2.5 h-2.5 rounded-full bg-sky-300 mr-2"></span>住民税（地方税）概算
+                                <span class="w-2.5 h-2.5 rounded-full bg-sky-300 mr-2"></span>住民税（地方税）
                             </span>
-                            <span class="font-bold" id="residentTaxDisplay">約 28 万円</span>
+                            <span class="font-bold whitespace-nowrap" id="residentTaxDisplay">約 30.7 万円</span>
                         </div>
-                        <div class="flex justify-between text-sm">
+                        <div class="flex justify-between gap-3 text-sm">
                             <span class="text-blue-200 flex items-center">
-                                <span class="w-2.5 h-2.5 rounded-full bg-amber-400 mr-2"></span>社会保険料（健康・年金等）
+                                <span class="w-2.5 h-2.5 rounded-full bg-amber-400 mr-2"></span>社会保険料（本人負担分）
                             </span>
-                            <span class="font-bold" id="socialInsuranceDisplay">約 87 万円</span>
+                            <span class="font-bold whitespace-nowrap" id="socialInsuranceDisplay">約 88.3 万円</span>
                         </div>
-                        <div class="flex justify-between text-sm pt-2 border-t border-white/10 text-rose-300 font-semibold">
+                        <div class="flex justify-between gap-3 text-sm pt-2 border-t border-white/10 font-semibold">
                             <span>個人負担率 合計（額面比）</span>
-                            <span id="personalBurdenRatio">約 22.5%</span>
+                            <span class="whitespace-nowrap" id="personalBurdenRatio">約 22.3%</span>
+                        </div>
+                        <div class="flex justify-between gap-3 text-xs pt-2 border-t border-white/10 text-blue-200">
+                            <span>（参考）会社が別途負担する社会保険料</span>
+                            <span class="whitespace-nowrap" id="employerSocialDisplay">約 90.4 万円</span>
                         </div>
                     </div>
+                    <p class="text-[11px] text-blue-300 leading-relaxed mt-3">
+                        国全体の社会保障負担率には、この会社負担分も含まれます（労災保険料・子ども・子育て拠出金は参考額に含めていません）。
+                    </p>
                 </div>
             </div>
         </section>
 
-        <!-- Knowledge Base & Explanations -->
-        <section class="space-y-4">
-            <h3 class="text-xl font-bold text-slate-800">国民負担率を深く理解するための3つのポイント</h3>
-            
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <!-- Info Card 1 -->
-                <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
-                    <div class="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold text-lg mb-3">
-                        1
-                    </div>
-                    <h4 class="font-bold text-slate-800 mb-2">国民所得(NI)基準 vs 対GDP比</h4>
-                    <p class="text-xs text-slate-600 leading-relaxed">
-                        日本の財務省発表で主に使われる「国民負担率」の分母は<strong>国民所得（企業や個人の稼いだ純所得）</strong>です。国民所得はGDPより小さいため負担率のパーセンテージが高く出ます。<br><br>
-                        一方、OECD国際比較では<strong>対GDP比</strong>が標準的に用いられ、この場合日本の負担率は約30%台前半となり、欧州諸国（40〜50%超）に比べ中位に位置します。
-                    </p>
+        <!-- Data Table -->
+        <section class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+            <details id="dataDetails">
+                <summary class="cursor-pointer">
+                    <span class="text-lg font-bold text-slate-800">年度別データ表（1970〜2026年度）</span>
+                    <span class="block text-xs text-slate-500 mt-1">グラフの元データ。ヘッダーの「推移CSV保存」から同じ内容をダウンロードできます</span>
+                </summary>
+                <div class="mt-4 overflow-x-auto max-h-[480px] overflow-y-auto border border-slate-100 rounded-xl">
+                    <table class="data-table w-full text-xs text-slate-700" id="dataTable"></table>
                 </div>
-
-                <!-- Info Card 2 -->
-                <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
-                    <div class="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center font-bold text-lg mb-3">
-                        2
-                    </div>
-                    <h4 class="font-bold text-slate-800 mb-2">租税負担率と社会保障負担率</h4>
-                    <p class="text-xs text-slate-600 leading-relaxed">
-                        国民負担率は<strong>「租税負担（国税＋地方税）」</strong>と<strong>「社会保障負担（年金・医療・介護等の公的保険料）」</strong>の合計です。<br><br>
-                        昭和55年(1980年)は社会保障負担率が約8%でしたが、急速な少子高齢化に伴い現在は18%超へと倍増。負担増の最大の要因は社会保障費の膨張にあります。
-                    </p>
-                </div>
-
-                <!-- Info Card 3 -->
-                <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
-                    <div class="w-10 h-10 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center font-bold text-lg mb-3">
-                        3
-                    </div>
-                    <h4 class="font-bold text-slate-800 mb-2">「潜在的国民負担率」の本当の意味</h4>
-                    <p class="text-xs text-slate-600 leading-relaxed">
-                        国民負担率に毎年の<strong>「財政赤字（国の借金）」</strong>を上乗せした指標です。<br><br>
-                        赤字国債はいずれ将来の税金等で返済・清算されるため、「現役世代が払っていないだけで、将来世代に繰り延べられている真の負担」を示しています。これを含めると実質50%を超えています。
-                    </p>
-                </div>
+            </details>
+            <div class="mt-4 text-xs text-slate-500 leading-relaxed space-y-1">
+                <p class="font-semibold text-slate-600">データに関する注記</p>
+                <ul class="list-disc pl-4 space-y-1">
+                    <li>単位は、国民所得と国内総生産が兆円、その他は%（対GDP比の欄を除き対国民所得比）。令和6（2024）年度までは実績、令和7年度は実績見込み、令和8年度は見通し。</li>
+                    <li>平成6年度以降は08SNA、昭和55年度以降は93SNA、昭和54年度以前は68SNAにもとづく計数で、基準の異なる年度の間は厳密には連続しません。租税負担は租税収入ベースで、SNAベースとは異なります。</li>
+                    <li>国税は特別会計および日本専売公社納付金を含み、地方法人特別税・特別法人事業税を国税に含めています。</li>
+                    <li>財政赤字は国および地方の財政収支の赤字で、一時的な特殊要因（平成10年度の国鉄長期債務の一般会計承継など）を除いた数値です。</li>
+                    <li>四捨五入の関係で、内訳の合計が総計と一致しない年度があります。</li>
+                </ul>
             </div>
         </section>
 
@@ -358,297 +474,818 @@
 
     <!-- Footer -->
     <footer class="bg-slate-900 text-slate-400 text-xs py-8 border-t border-slate-800 mt-12">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row justify-between items-center gap-4">
-            <p>© 日本の国民負担率 見える化ダッシュボード. Data based on Ministry of Finance Japan reports.</p>
-            <div class="flex items-center space-x-4">
-                <a href="https://www.mof.go.jp/tax_policy/summary/condition/020.htm" target="_blank" rel="noopener noreferrer" class="hover:text-white transition-colors underline">
-                    財務省: 国民負担率の推移資料
-                </a>
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-4">
+            <div>
+                <p class="text-slate-300 font-semibold mb-2">出典</p>
+                <ul class="space-y-1">
+                    <li><a href="https://www.mof.go.jp/policy/budget/topics/futanritsu/20260305.html" target="_blank" rel="noopener noreferrer" class="hover:text-white transition-colors underline">財務省「令和8年度の国民負担率を公表します」（令和8年3月5日）</a> — 推移・国際比較</li>
+                    <li><a href="https://www.mof.go.jp/tax_policy/summary/condition/a04.htm" target="_blank" rel="noopener noreferrer" class="hover:text-white transition-colors underline">財務省「負担率に関する資料」</a> — 租税負担率の内訳</li>
+                    <li><a href="https://www.mof.go.jp/tax_policy/tax_reform/outline/fy2026/08taikou_01.htm" target="_blank" rel="noopener noreferrer" class="hover:text-white transition-colors underline">財務省「令和8年度税制改正の大綱」</a> — シミュレーターの所得税・住民税</li>
+                    <li><a href="https://www.kyoukaikenpo.or.jp/about/business/insurance_rate/rate_prefectures/r08/index.html" target="_blank" rel="noopener noreferrer" class="hover:text-white transition-colors underline">全国健康保険協会「令和8年度保険料率」</a>・<a href="https://www.mhlw.go.jp/content/001692566.pdf" target="_blank" rel="noopener noreferrer" class="hover:text-white transition-colors underline">厚生労働省「令和8年度の雇用保険料率」</a> — シミュレーターの社会保険料</li>
+                </ul>
+            </div>
+            <div class="flex flex-col sm:flex-row justify-between gap-2 pt-4 border-t border-slate-800">
+                <p>© 2026 日本の国民負担率 見える化ダッシュボード. Data: Ministry of Finance, Japan.</p>
+                <p>データ最終確認: 2026年10月4日／<a href="https://github.com/katzkawai/kklab-tax-burden" target="_blank" rel="noopener noreferrer" class="hover:text-white transition-colors underline">GitHub</a></p>
             </div>
         </div>
     </footer>
 
     <script>
-        // --- 1. Historical Dataset (財務省「国民負担率の推移」準拠データ) ---
-        const historicalData = [
-            { year: '1980 (昭55)', nationalTax: 16.7, localTax: 7.8, socialSec: 6.0, deficit: 7.3 },
-            { year: '1985 (昭60)', nationalTax: 19.3, localTax: 8.7, socialSec: 8.3, deficit: 3.8 },
-            { year: '1990 (平2)',  nationalTax: 23.3, localTax: 10.3, socialSec: 9.8, deficit: 0.8 },
-            { year: '1995 (平7)',  nationalTax: 17.0, localTax: 9.7,  socialSec: 10.5, deficit: 8.8 },
-            { year: '2000 (平12)', nationalTax: 15.6, localTax: 9.7,  socialSec: 10.7, deficit: 8.4 },
-            { year: '2005 (平17)', nationalTax: 15.0, localTax: 9.1,  socialSec: 13.9, deficit: 8.2 },
-            { year: '2010 (平22)', nationalTax: 13.0, localTax: 8.9,  socialSec: 15.3, deficit: 12.6 },
-            { year: '2015 (平27)', nationalTax: 16.3, localTax: 9.5,  socialSec: 16.9, deficit: 6.8 },
-            { year: '2020 (令2)',  nationalTax: 17.6, localTax: 9.8,  socialSec: 18.7, deficit: 16.5 },
-            { year: '2021 (令3)',  nationalTax: 19.0, localTax: 9.9,  socialSec: 19.2, deficit: 11.2 },
-            { year: '2022 (令4)',  nationalTax: 19.7, localTax: 10.0, socialSec: 18.7, deficit: 7.9 },
-            { year: '2023 (令5)',  nationalTax: 17.6, localTax: 9.5,  socialSec: 18.7, deficit: 5.1 },
-            { year: '2024 (令6見通し)', nationalTax: 16.9, localTax: 9.6, socialSec: 18.6, deficit: 5.8 }
+        // ============================================================
+        // 1. データ
+        // ============================================================
+        // 財務省「国民負担率（対国民所得比）の推移」（令和8年3月5日公表）
+        // [年度, 国税, 地方税, 租税負担率, 社会保障負担率, 国民負担率, 財政赤字, 潜在的国民負担率, 国民負担率(対GDP比), 国民所得(兆円), GDP(兆円)]
+        const MOF_ROWS = [
+            [1970, 12.7, 6.1, 18.9, 5.4, 24.3, 0.5, 24.9, 19.7, 61.0, 75.3],
+            [1971, 12.8, 6.4, 19.2, 5.9, 25.2, 2.5, 27.7, 20.0, 65.9, 82.9],
+            [1972, 13.3, 6.4, 19.8, 5.9, 25.6, 2.8, 28.4, 20.7, 77.9, 96.5],
+            [1973, 14.7, 6.8, 21.4, 5.9, 27.4, 0.7, 28.1, 22.5, 95.8, 116.7],
+            [1974, 14.0, 7.3, 21.3, 7.0, 28.3, 3.3, 31.6, 23.0, 112.5, 138.5],
+            [1975, 11.7, 6.6, 18.3, 7.5, 25.7, 7.5, 33.3, 20.9, 124.0, 152.4],
+            [1976, 12.0, 6.8, 18.8, 7.8, 26.6, 7.2, 33.8, 21.8, 140.4, 171.3],
+            [1977, 11.8, 7.1, 18.9, 8.3, 27.3, 8.3, 35.6, 22.3, 155.7, 190.1],
+            [1978, 13.5, 7.1, 20.6, 8.5, 29.2, 8.0, 37.1, 24.0, 171.8, 208.6],
+            [1979, 13.7, 7.7, 21.4, 8.8, 30.2, 8.7, 38.9, 24.4, 182.2, 225.2],
+            [1980, 13.9, 7.8, 21.7, 8.8, 30.5, 8.2, 38.7, 25.0, 203.9, 248.4],
+            [1981, 14.4, 8.2, 22.6, 9.6, 32.2, 8.2, 40.4, 25.7, 211.6, 264.6],
+            [1982, 14.5, 8.5, 23.0, 9.8, 32.8, 7.9, 40.6, 26.1, 220.1, 276.2],
+            [1983, 14.8, 8.6, 23.3, 9.7, 33.1, 7.1, 40.1, 26.5, 231.3, 288.8],
+            [1984, 15.1, 8.8, 24.0, 9.8, 33.7, 5.9, 39.7, 26.6, 243.1, 308.2],
+            [1985, 15.0, 8.9, 24.0, 10.0, 33.9, 5.1, 39.0, 26.8, 260.6, 330.4],
+            [1986, 16.0, 9.2, 25.2, 10.1, 35.3, 4.3, 39.6, 27.7, 267.9, 342.3],
+            [1987, 17.0, 9.7, 26.7, 10.1, 36.8, 2.9, 39.6, 28.5, 281.1, 362.3],
+            [1988, 17.2, 9.9, 27.2, 9.9, 37.1, 1.4, 38.5, 29.0, 302.7, 387.7],
+            [1989, 17.8, 9.9, 27.7, 10.2, 37.9, 1.0, 38.9, 29.2, 320.8, 415.9],
+            [1990, 18.1, 9.6, 27.7, 10.6, 38.4, 0.1, 38.5, 29.5, 346.9, 451.7],
+            [1991, 17.1, 9.5, 26.6, 10.7, 37.4, 0.5, 37.9, 29.1, 368.9, 473.6],
+            [1992, 15.7, 9.4, 25.1, 11.2, 36.3, 4.5, 40.8, 27.5, 366.0, 483.3],
+            [1993, 15.6, 9.2, 24.8, 11.5, 36.3, 6.7, 43.0, 27.5, 365.4, 482.6],
+            [1994, 14.2, 8.6, 22.8, 11.5, 34.3, 8.0, 42.3, 25.0, 379.9, 522.0],
+            [1995, 14.2, 8.7, 22.9, 12.2, 35.1, 8.9, 44.0, 25.4, 386.7, 534.7],
+            [1996, 13.8, 8.8, 22.5, 12.1, 34.6, 8.3, 42.9, 25.3, 401.0, 549.4],
+            [1997, 14.1, 9.1, 23.2, 12.7, 35.9, 7.4, 43.3, 25.7, 395.3, 552.3],
+            [1998, 13.5, 9.5, 22.9, 13.2, 36.1, 10.3, 46.4, 25.4, 380.0, 541.0],
+            [1999, 13.0, 9.3, 22.3, 13.2, 35.5, 12.0, 47.4, 24.9, 377.5, 536.9],
+            [2000, 13.4, 9.1, 22.5, 12.9, 35.4, 9.5, 44.9, 25.5, 392.5, 545.8],
+            [2001, 13.2, 9.4, 22.6, 13.7, 36.3, 9.0, 45.2, 25.7, 379.0, 535.4],
+            [2002, 12.2, 8.9, 21.1, 13.8, 35.0, 10.6, 45.6, 24.7, 374.6, 530.5],
+            [2003, 11.9, 8.6, 20.5, 13.7, 34.2, 10.1, 44.3, 24.4, 379.9, 532.4],
+            [2004, 12.5, 8.7, 21.2, 13.6, 34.7, 7.6, 42.3, 25.1, 385.6, 534.6],
+            [2005, 13.6, 9.1, 22.7, 13.9, 36.7, 5.6, 42.3, 26.1, 383.6, 538.9],
+            [2006, 13.8, 9.3, 23.1, 14.2, 37.3, 4.1, 41.4, 26.9, 391.6, 542.8],
+            [2007, 13.4, 10.3, 23.7, 14.5, 38.1, 3.5, 41.6, 27.5, 392.7, 543.8],
+            [2008, 12.7, 11.0, 23.6, 15.9, 39.6, 6.1, 45.7, 27.4, 361.1, 522.5],
+            [2009, 11.5, 10.1, 21.6, 15.9, 37.4, 12.6, 50.0, 26.1, 349.7, 500.8],
+            [2010, 12.1, 9.5, 21.5, 15.9, 37.4, 11.0, 48.4, 26.6, 362.2, 509.2],
+            [2011, 12.7, 9.6, 22.3, 16.7, 39.0, 11.6, 50.6, 27.5, 355.6, 504.2],
+            [2012, 13.2, 9.6, 22.8, 17.1, 39.9, 10.6, 50.5, 28.3, 357.4, 504.5],
+            [2013, 13.7, 9.5, 23.2, 16.8, 40.0, 9.4, 49.4, 28.7, 372.9, 519.2],
+            [2014, 15.3, 9.7, 25.0, 17.1, 42.1, 7.6, 49.7, 29.9, 379.1, 533.7],
+            [2015, 15.1, 9.9, 25.0, 16.9, 42.0, 6.1, 48.1, 30.1, 395.9, 551.9],
+            [2016, 14.9, 10.0, 24.9, 17.5, 42.4, 6.3, 48.7, 30.1, 394.9, 556.3],
+            [2017, 15.5, 9.9, 25.4, 17.6, 43.0, 5.1, 48.0, 30.5, 403.1, 567.7],
+            [2018, 15.7, 10.0, 25.7, 17.9, 43.5, 4.4, 47.9, 31.2, 408.6, 569.9],
+            [2019, 15.4, 10.2, 25.7, 18.5, 44.1, 5.3, 49.5, 31.1, 402.8, 570.6],
+            [2020, 17.1, 10.8, 27.9, 19.4, 47.3, 15.3, 62.6, 32.4, 379.1, 554.3],
+            [2021, 17.8, 10.5, 28.4, 18.8, 47.2, 9.8, 57.0, 33.0, 403.1, 576.6],
+            [2022, 18.2, 10.5, 28.7, 18.5, 47.3, 6.1, 53.4, 33.5, 419.1, 591.7],
+            [2023, 17.5, 10.1, 27.6, 18.1, 45.7, 4.1, 49.8, 32.6, 441.4, 619.4],
+            [2024, 17.9, 10.2, 28.2, 18.5, 46.7, 3.6, 50.3, 32.9, 452.0, 642.4],
+            [2025, 18.2, 10.1, 28.3, 17.8, 46.1, 3.0, 49.1, 32.9, 477.6, 669.2],
+            [2026, 18.1, 9.9, 28.0, 17.6, 45.7, 2.7, 48.4, 32.7, 496.1, 691.9],
+        ];
+        // 実績以外の年度（毎年の公表にあわせて更新）
+        const FORECAST_STATUS = { 2025: '実績見込み', 2026: '見通し' };
+
+        const data = MOF_ROWS.map(r => ({
+            year: r[0], nat: r[1], loc: r[2], tax: r[3], ss: r[4], burden: r[5],
+            deficit: r[6], potential: r[7], gdpRatio: r[8], ni: r[9], gdp: r[10],
+            status: FORECAST_STATUS[r[0]] || '実績'
+        }));
+
+        // 国民負担率の内訳（令和8年度見通し）: 財務省「国民負担率及び租税負担率の推移（対国民所得比）」
+        const BREAKDOWN = [
+            { label: '個人所得課税', value: 8.5, group: 'tax', note: '所得税・個人住民税など' },
+            { label: '法人所得課税', value: 7.1, group: 'tax', note: '法人税・法人住民税・法人事業税など' },
+            { label: '消費課税', value: 8.8, group: 'tax', note: '消費税・酒税・揮発油税など' },
+            { label: '資産課税等', value: 3.6, group: 'tax', note: '固定資産税・相続税など' },
+            { label: '社会保障負担', value: 17.6, group: 'ss', note: '社会保険料（本人負担＋事業主負担）' },
         ];
 
-        const labels = historicalData.map(d => d.year);
-        const nationalTaxSeries = historicalData.map(d => d.nationalTax);
-        const localTaxSeries = historicalData.map(d => d.localTax);
-        const socialSecSeries = historicalData.map(d => d.socialSec);
-        const potentialBurdenSeries = historicalData.map(d => 
-            Number((d.nationalTax + d.localTax + d.socialSec + d.deficit).toFixed(1))
-        );
+        // 財務省「国民負担率の国際比較（OECD加盟35カ国）」
+        // [国名, 租税負担率, 社会保障負担率, 国民負担率(対国民所得比), 国民負担率(対GDP比), 対象年]
+        const INTL = [
+            ['ルクセンブルク', 64.6, 28.1, 92.7, 41.1, 2023],
+            ['フランス', 41.6, 23.1, 64.8, 45.7, 2023],
+            ['フィンランド', 45.1, 18.6, 63.8, 42.8, 2023],
+            ['オーストリア', 40.4, 22.4, 62.7, 43.0, 2023],
+            ['デンマーク', 60.7, 1.0, 61.7, 45.0, 2023],
+            ['イタリア', 41.9, 17.9, 59.8, 41.8, 2023],
+            ['ベルギー', 38.9, 20.3, 59.2, 43.7, 2023],
+            ['ギリシャ', 39.8, 18.7, 58.5, 40.8, 2023],
+            ['ポルトガル', 37.8, 18.4, 56.2, 37.1, 2023],
+            ['スウェーデン', 49.9, 5.3, 55.2, 36.3, 2023],
+            ['ノルウェー', 45.3, 9.6, 55.0, 43.4, 2022],
+            ['ハンガリー', 39.3, 15.6, 54.9, 35.1, 2023],
+            ['オランダ', 36.2, 17.2, 53.4, 39.8, 2023],
+            ['ドイツ', 30.8, 22.6, 53.4, 39.8, 2023],
+            ['スロベニア', 29.8, 22.8, 52.6, 36.7, 2023],
+            ['ニュージーランド', 49.4, 1.0, 50.4, 34.8, 2023],
+            ['スロバキア', 28.6, 21.7, 50.3, 35.5, 2023],
+            ['アイルランド', 40.7, 9.3, 50.0, 22.1, 2023],
+            ['チェコ', 27.1, 22.9, 50.0, 33.4, 2023],
+            ['英国', 38.3, 11.5, 49.8, 36.2, 2023],
+            ['スペイン', 32.0, 17.7, 49.7, 36.9, 2023],
+            ['ポーランド', 29.7, 19.5, 49.2, 36.0, 2023],
+            ['ラトビア', 32.8, 15.9, 48.8, 33.0, 2023],
+            ['エストニア', 31.1, 17.6, 48.7, 33.9, 2023],
+            ['カナダ', 40.8, 7.0, 47.8, 34.7, 2023],
+            ['日本', 27.6, 18.1, 45.7, 32.6, 2023],
+            ['リトアニア', 29.2, 14.1, 43.3, 32.5, 2023],
+            ['イスラエル', 34.1, 7.5, 41.5, 30.2, 2023],
+            ['韓国', 26.8, 13.4, 40.2, 28.4, 2023],
+            ['スイス', 28.8, 9.5, 38.3, 27.1, 2023],
+            ['米国', 25.6, 8.6, 34.2, 26.1, 2023],
+            ['トルコ', 23.4, 9.9, 33.2, 23.9, 2020],
+            ['コスタリカ', 20.7, 11.4, 32.1, 24.9, 2023],
+            ['チリ', 23.1, 1.8, 25.0, 21.0, 2023],
+            ['メキシコ', 21.4, 2.7, 24.1, 17.3, 2023],
+        ].map(r => ({ name: r[0], tax: r[1], ss: r[2], total: r[3], gdp: r[4], year: r[5] }));
 
-        const ctxTrend = document.getElementById('trendChart').getContext('2d');
-        const trendChart = new Chart(ctxTrend, {
-            type: 'bar',
-            data: {
-                labels: labels,
-                datasets: [
-                    {
-                        type: 'line',
-                        label: '潜在的国民負担率 (財政赤字含む)',
-                        data: potentialBurdenSeries,
-                        borderColor: '#e11d48',
-                        borderWidth: 2.5,
-                        borderDash: [5, 5],
-                        pointBackgroundColor: '#e11d48',
-                        pointRadius: 4,
-                        fill: false,
-                        yAxisID: 'y'
-                    },
-                    {
-                        label: '国税',
-                        data: nationalTaxSeries,
-                        backgroundColor: '#4338ca',
-                        stack: 'combined',
-                        borderRadius: 2
-                    },
-                    {
-                        label: '地方税',
-                        data: localTaxSeries,
-                        backgroundColor: '#0ea5e9',
-                        stack: 'combined',
-                        borderRadius: 2
-                    },
-                    {
-                        label: '社会保障負担',
-                        data: socialSecSeries,
-                        backgroundColor: '#f59e0b',
-                        stack: 'combined',
-                        borderRadius: 4
-                    }
-                ]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                interaction: {
-                    mode: 'index',
-                    intersect: false,
-                },
-                plugins: {
-                    legend: {
-                        position: 'top',
-                        labels: {
-                            boxWidth: 12,
-                            font: { family: 'Noto Sans JP', size: 11 }
-                        }
-                    },
-                    tooltip: {
-                        callbacks: {
-                            afterBody: function(context) {
-                                const index = context[0].dataIndex;
-                                const item = historicalData[index];
-                                const total = (item.nationalTax + item.localTax + item.socialSec).toFixed(1);
-                                return `--------------------\n国民負担率合計: ${total}%\n財政赤字分: +${item.deficit}%`;
-                            },
-                            label: function(context) {
-                                return ` ${context.dataset.label}: ${context.raw}%`;
-                            }
-                        }
-                    }
-                },
-                scales: {
-                    x: {
-                        stacked: true,
-                        ticks: {
-                            font: { size: 10 },
-                            maxRotation: 45,
-                            minRotation: 45
-                        },
-                        grid: { display: false }
-                    },
-                    y: {
-                        stacked: true,
-                        max: 70,
-                        ticks: {
-                            callback: function(val) { return val + '%'; }
-                        },
-                        grid: { color: '#f1f5f9' }
-                    }
-                }
-            }
-        });
+        // 財務省「国民負担率の国際比較」
+        // [国, 対象年, 租税, 社会保障, 国民負担率, 財政赤字, 潜在的国民負担率, 国民負担率(対GDP比), 潜在的国民負担率(対GDP比)]
+        const MAJOR = [
+            ['日本', '2026年度（見通し）', 28.0, 17.6, 45.7, 2.7, 48.4, 32.7, 34.7],
+            ['日本', '2023年度（実績）', 27.6, 18.1, 45.7, 4.1, 49.8, 32.6, 35.5],
+            ['米国', '2023年', 25.6, 8.6, 34.2, 10.7, 44.9, 26.1, 34.3],
+            ['英国', '2023年', 38.3, 11.5, 49.8, 8.6, 58.4, 36.2, 42.5],
+            ['ドイツ', '2023年', 30.8, 22.6, 53.4, 3.7, 57.0, 39.8, 42.6],
+            ['スウェーデン', '2023年', 49.9, 5.3, 55.2, 2.5, 57.7, 36.3, 37.9],
+            ['フランス', '2023年', 41.6, 23.1, 64.8, 8.5, 73.3, 45.7, 51.7],
+        ];
 
-        const ctxBreakdown = document.getElementById('breakdownChart').getContext('2d');
-        const breakdownChart = new Chart(ctxBreakdown, {
-            type: 'doughnut',
-            data: {
-                labels: ['可処分所得 (手残り)', '国税', '地方税', '社会保障負担'],
-                datasets: [{
-                    data: [54.9, 16.9, 9.6, 18.6],
-                    backgroundColor: [
-                        '#10b981', // Emerald for disposable
-                        '#4338ca', // Indigo for national tax
-                        '#0ea5e9', // Sky for local tax
-                        '#f59e0b'  // Amber for social security
-                    ],
-                    borderWidth: 2,
-                    borderColor: '#ffffff'
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                cutout: '68%',
-                plugins: {
-                    legend: { display: false },
-                    tooltip: {
-                        callbacks: {
-                            label: function(context) {
-                                return ` ${context.label}: ${context.raw}%`;
-                            }
-                        }
-                    }
-                }
-            }
-        });
+        // ============================================================
+        // 2. 共通ユーティリティ
+        // ============================================================
+        const COLORS = {
+            nat: '#4338ca',       // 国税・租税（indigo）
+            loc: '#0ea5e9',       // 地方税（sky）
+            ss: '#f59e0b',        // 社会保障負担（amber）
+            potential: '#e11d48', // 潜在的国民負担率（rose）
+            gdp: '#475569',       // 対GDP比（slate）
+            ink: '#334155',
+            grid: '#e2e8f0'
+        };
+        const FONT_FAMILY = "'Inter', 'Noto Sans JP', sans-serif";
+        const fmt1 = v => v.toFixed(1);
+        const $ = id => document.getElementById(id);
 
-        const salaryRange = document.getElementById('salaryRange');
-        const salaryDisplay = document.getElementById('salaryDisplay');
-        const dependentsSelect = document.getElementById('dependentsSelect');
-        const ageSelect = document.getElementById('ageSelect');
-
-        const takeHomeSalary = document.getElementById('takeHomeSalary');
-        const takeHomeRatio = document.getElementById('takeHomeRatio');
-        const incomeTaxDisplay = document.getElementById('incomeTaxDisplay');
-        const residentTaxDisplay = document.getElementById('residentTaxDisplay');
-        const socialInsuranceDisplay = document.getElementById('socialInsuranceDisplay');
-        const personalBurdenRatio = document.getElementById('personalBurdenRatio');
-
-        function calculateTaxes() {
-            const gross = parseFloat(salaryRange.value) * 10000; // in Yen
-            const dependents = parseInt(dependentsSelect.value, 10);
-            const isOver40 = ageSelect.value === 'over40';
-
-            // 1. 給与所得控除 (令和2年以降基準)
-            let deduction = 0;
-            if (gross <= 1800000) {
-                deduction = gross * 0.4 - 100000;
-                if (deduction < 550000) deduction = 550000;
-            } else if (gross <= 3600000) {
-                deduction = gross * 0.3 + 80000;
-            } else if (gross <= 6600000) {
-                deduction = gross * 0.2 + 440000;
-            } else if (gross <= 8500000) {
-                deduction = gross * 0.1 + 1100000;
-            } else {
-                deduction = 1950000; // 上限
-            }
-            const netEmploymentIncome = Math.max(0, gross - deduction);
-
-            // 2. 社会保険料概算 (健康保険・厚生年金・雇用保険: 約14.5%〜15.5%)
-            const socRate = isOver40 ? 0.155 : 0.145;
-            const socialSec = Math.round(gross * socRate);
-
-            // 3. 基礎控除 & 扶養控除
-            const basicDeduction = 480000;
-            const depDeduction = dependents * 380000;
-            const totalExemptions = socialSec + basicDeduction + depDeduction;
-
-            // 4. 課税所得
-            const taxableIncome = Math.max(0, netEmploymentIncome - totalExemptions);
-
-            // 5. 所得税 (累進課税)
-            let incomeTax = 0;
-            if (taxableIncome <= 1950000) {
-                incomeTax = taxableIncome * 0.05;
-            } else if (taxableIncome <= 3300000) {
-                incomeTax = taxableIncome * 0.10 - 97500;
-            } else if (taxableIncome <= 6950000) {
-                incomeTax = taxableIncome * 0.20 - 427500;
-            } else if (taxableIncome <= 9000000) {
-                incomeTax = taxableIncome * 0.23 - 636000;
-            } else if (taxableIncome <= 18000000) {
-                incomeTax = taxableIncome * 0.33 - 1536000;
-            } else {
-                incomeTax = taxableIncome * 0.40 - 2796000;
-            }
-            // 復興特別所得税 (2.1%)
-            incomeTax = Math.round(incomeTax * 1.021);
-
-            // 6. 住民税 (一律約10%)
-            const residentTaxable = Math.max(0, netEmploymentIncome - (socialSec + 430000 + dependents * 330000));
-            const residentTax = Math.round(residentTaxable * 0.10 + 5000); // 均等割5000円
-
-            // 7. 手取り額と比率
-            const totalBurden = incomeTax + residentTax + socialSec;
-            const netIncome = Math.max(0, gross - totalBurden);
-
-            // Update UI
-            salaryDisplay.textContent = `${salaryRange.value} 万円`;
-            takeHomeSalary.textContent = (netIncome / 10000).toFixed(0);
-            takeHomeRatio.textContent = ((netIncome / gross) * 100).toFixed(1);
-            
-            incomeTaxDisplay.textContent = `約 ${(incomeTax / 10000).toFixed(1)} 万円`;
-            residentTaxDisplay.textContent = `約 ${(residentTax / 10000).toFixed(1)} 万円`;
-            socialInsuranceDisplay.textContent = `約 ${(socialSec / 10000).toFixed(1)} 万円`;
-            
-            const totalBurdenRate = ((totalBurden / gross) * 100).toFixed(1);
-            personalBurdenRatio.textContent = `約 ${totalBurdenRate}%`;
+        function eraLabel(year, full) {
+            let era, n;
+            if (year >= 2019) { era = full ? '令和' : '令'; n = year - 2018; }
+            else if (year >= 1989) { era = full ? '平成' : '平'; n = year - 1988; }
+            else { era = full ? '昭和' : '昭'; n = year - 1925; }
+            return era + (n === 1 ? '元' : n);
+        }
+        function signed(v) {
+            const r = Math.round(v * 10) / 10;
+            return (r > 0 ? '+' : r < 0 ? '−' : '±') + Math.abs(r).toFixed(1);
+        }
+        function el(tag, className, text) {
+            const e = document.createElement(tag);
+            if (className) e.className = className;
+            if (text !== undefined) e.textContent = text;
+            return e;
+        }
+        function setPressed(buttons, active) {
+            buttons.forEach(b => b.setAttribute('aria-pressed', String(b === active)));
         }
 
-        salaryRange.addEventListener('input', calculateTaxes);
-        dependentsSelect.addEventListener('change', calculateTaxes);
-        ageSelect.addEventListener('change', calculateTaxes);
+        // ============================================================
+        // 3. 最新指標カード
+        // ============================================================
+        const latest = data[data.length - 1];
+        const prev = data[data.length - 2];
+        $('latestYearLabel').textContent = eraLabel(latest.year, true) + '年度';
+        $('latestStatusLabel').textContent = latest.status;
+        $('statBurden').textContent = fmt1(latest.burden);
+        $('statBurdenNote').textContent = `租税 ${fmt1(latest.tax)}% ＋ 社会保障 ${fmt1(latest.ss)}%／前年度比 ${signed(latest.burden - prev.burden)}pt`;
+        $('statGdpNote').textContent = `対GDP比では ${fmt1(latest.gdpRatio)}%`;
+        $('statTax').textContent = fmt1(latest.tax);
+        $('statTaxNote').textContent = `国税 ${fmt1(latest.nat)}% ＋ 地方税 ${fmt1(latest.loc)}%`;
+        $('statSs').textContent = fmt1(latest.ss);
+        $('statPotential').textContent = fmt1(latest.potential);
+        $('statPotentialNote').textContent = `国民負担率 ${fmt1(latest.burden)}% ＋ 財政赤字 ${fmt1(latest.deficit)}%`;
 
-        // Run on load
-        calculateTaxes();
+        // ============================================================
+        // 4. 内訳（横棒）
+        // ============================================================
+        (function renderBreakdown() {
+            const list = $('breakdownList');
+            const max = 20; // 棒の目盛り上限（%）
+            BREAKDOWN.forEach(item => {
+                const row = el('div');
+                const head = el('div', 'flex justify-between items-baseline text-sm');
+                head.appendChild(el('span', 'font-medium text-slate-700', item.label));
+                head.appendChild(el('span', 'font-semibold text-slate-900', fmt1(item.value) + '%'));
+                const track = el('div', 'mt-1 h-2.5 bg-slate-100 rounded-r');
+                const bar = el('div', 'h-2.5 rounded-r ' + (item.group === 'tax' ? 'bg-indigo-700' : 'bg-amber-500'));
+                bar.style.width = (item.value / max * 100) + '%';
+                track.appendChild(bar);
+                row.appendChild(head);
+                row.appendChild(track);
+                row.appendChild(el('p', 'mt-1 text-[11px] text-slate-500', item.note));
+                list.appendChild(row);
+            });
+        })();
 
-        // Copy URL
-        document.getElementById('copyUrlBtn').addEventListener('click', function() {
-            const tempInput = document.createElement('input');
-            tempInput.value = window.location.href;
-            document.body.appendChild(tempInput);
-            tempInput.select();
-            try {
-                document.execCommand('copy');
-                const originalText = this.innerHTML;
-                this.innerHTML = `
-                    <svg class="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
-                    <span>コピー完了!</span>
-                `;
-                setTimeout(() => { this.innerHTML = originalText; }, 2000);
-            } catch (err) {
-                console.error('URL copy failed');
+        // ============================================================
+        // 5. 推移グラフ
+        // ============================================================
+        let trendRows = data;
+        let trendChart = null;
+
+        function trendDatasets(rows) {
+            // 実績見込み・見通しの年度は淡色で表示
+            const shade = hex => rows.map(d => d.status === '実績' ? hex : hex + '80');
+            const bar = (label, key, color, extra) => Object.assign({
+                type: 'bar', label, data: rows.map(d => d[key]), backgroundColor: shade(color),
+                stack: 'burden', order: 2, pointStyle: 'rect',
+                borderColor: '#ffffff', borderWidth: { top: 1, right: 0, bottom: 0, left: 0 },
+                maxBarThickness: 24, categoryPercentage: 0.92, barPercentage: 0.82
+            }, extra);
+            const line = (label, key, color, extra) => Object.assign({
+                type: 'line', label, data: rows.map(d => d[key]), borderColor: color, backgroundColor: color,
+                borderWidth: 2, pointRadius: 0, pointHoverRadius: 5, pointHitRadius: 8,
+                pointBorderWidth: 2, pointHoverBorderColor: '#ffffff', pointHoverBorderWidth: 2,
+                fill: false, tension: 0, order: 1, pointStyle: 'line', stack: key
+            }, extra);
+            return [
+                bar('国税', 'nat', COLORS.nat),
+                bar('地方税', 'loc', COLORS.loc),
+                bar('社会保障負担', 'ss', COLORS.ss, { borderRadius: { topLeft: 2, topRight: 2 } }),
+                line('潜在的国民負担率（財政赤字を含む）', 'potential', COLORS.potential, { borderDash: [6, 4] }),
+                line('国民負担率（対GDP比）', 'gdpRatio', COLORS.gdp)
+            ];
+        }
+
+        // 右端に最新年度の値、折れ線の最大値にラベルを描く
+        const trendLabelsPlugin = {
+            id: 'trendLabels',
+            afterDatasetsDraw(chart) {
+                const { ctx, chartArea, scales } = chart;
+                const rows = trendRows;
+                const last = rows[rows.length - 1];
+                const compact = chart.width < 520;
+                const barsVisible = [0, 1, 2].every(i => chart.isDatasetVisible(i));
+                const items = [];
+                if (chart.isDatasetVisible(3)) items.push({ v: last.potential, name: '潜在的' });
+                if (barsVisible) items.push({ v: last.burden, name: '負担率' });
+                if (chart.isDatasetVisible(4)) items.push({ v: last.gdpRatio, name: 'GDP比' });
+                items.forEach(it => { it.y = scales.y.getPixelForValue(it.v); });
+                items.sort((a, b) => a.y - b.y);
+                for (let i = 1; i < items.length; i++) {
+                    if (items[i].y - items[i - 1].y < 14) items[i].y = items[i - 1].y + 14;
+                }
+                ctx.save();
+                ctx.font = `600 11px ${FONT_FAMILY}`;
+                ctx.fillStyle = COLORS.ink;
+                ctx.textBaseline = 'middle';
+                ctx.textAlign = 'left';
+                items.forEach(it => {
+                    ctx.fillText(compact ? fmt1(it.v) : `${it.name} ${fmt1(it.v)}`, chartArea.right + 6, it.y);
+                });
+                // 潜在的国民負担率のピーク
+                if (chart.isDatasetVisible(3)) {
+                    let peak = 0;
+                    rows.forEach((d, i) => { if (d.potential > rows[peak].potential) peak = i; });
+                    const pt = chart.getDatasetMeta(3).data[peak];
+                    if (pt && peak < rows.length - 3) {
+                        ctx.textAlign = 'center';
+                        ctx.textBaseline = 'bottom';
+                        ctx.fillText(`${fmt1(rows[peak].potential)}（${rows[peak].year}年度）`, pt.x, pt.y - 6);
+                    }
+                }
+                ctx.restore();
             }
-            document.body.removeChild(tempInput);
+        };
+
+        function buildTrendChart() {
+            Chart.defaults.font.family = FONT_FAMILY;
+            Chart.defaults.color = '#64748b';
+            trendChart = new Chart($('trendChart').getContext('2d'), {
+                type: 'bar',
+                data: { labels: trendRows.map(d => d.year), datasets: trendDatasets(trendRows) },
+                plugins: [trendLabelsPlugin],
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: { mode: 'index', intersect: false },
+                    layout: { padding: { right: ctx => ctx.chart.width < 520 ? 32 : 74, top: 4 } },
+                    plugins: {
+                        legend: {
+                            position: 'top',
+                            align: 'start',
+                            labels: {
+                                usePointStyle: true, boxWidth: 18, boxHeight: 8, padding: 14, font: { size: 11 },
+                                sort: (a, b) => a.datasetIndex - b.datasetIndex
+                            }
+                        },
+                        tooltip: {
+                            usePointStyle: true,
+                            itemSort: (a, b) => a.datasetIndex - b.datasetIndex,
+                            callbacks: {
+                                title(items) {
+                                    const d = trendRows[items[0].dataIndex];
+                                    const status = d.status === '実績' ? '' : `・${d.status}`;
+                                    return `${d.year}年度（${eraLabel(d.year, true)}${status}）`;
+                                },
+                                label(context) {
+                                    return ` ${context.dataset.label}: ${fmt1(context.raw)}%`;
+                                },
+                                afterBody(items) {
+                                    const d = trendRows[items[0].dataIndex];
+                                    return [
+                                        '',
+                                        `国民負担率: ${fmt1(d.burden)}%（租税 ${fmt1(d.tax)}% ＋ 社会保障 ${fmt1(d.ss)}%）`,
+                                        `財政赤字: ${fmt1(d.deficit)}%`
+                                    ];
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            stacked: true,
+                            grid: { display: false },
+                            ticks: {
+                                autoSkip: false,
+                                maxRotation: 0,
+                                font: { size: 10 },
+                                callback(value, index) {
+                                    const d = trendRows[index];
+                                    if (!d) return '';
+                                    const maxLabels = Math.max(4, Math.floor(this.chart.width / 56));
+                                    const step = [1, 2, 5, 10].find(s => trendRows.length / s <= maxLabels) || 10;
+                                    return d.year % step === 0 ? [String(d.year), `(${eraLabel(d.year)})`] : '';
+                                }
+                            }
+                        },
+                        y: {
+                            stacked: true,
+                            min: 0,
+                            max: 70,
+                            border: { display: false },
+                            ticks: { stepSize: 10, callback: v => v + '%' },
+                            grid: { color: COLORS.grid }
+                        }
+                    }
+                }
+            });
+        }
+
+        function setTrendRange(startYear) {
+            trendRows = data.filter(d => d.year >= startYear);
+            if (!trendChart) return;
+            trendChart.data.labels = trendRows.map(d => d.year);
+            const fresh = trendDatasets(trendRows);
+            trendChart.data.datasets.forEach((ds, i) => {
+                ds.data = fresh[i].data;
+                if (fresh[i].type === 'bar') ds.backgroundColor = fresh[i].backgroundColor;
+            });
+            trendChart.update();
+        }
+
+        const rangeButtons = Array.from(document.querySelectorAll('[data-range]'));
+        rangeButtons.forEach(btn => btn.addEventListener('click', () => {
+            setPressed(rangeButtons, btn);
+            setTrendRange(Number(btn.dataset.range));
+        }));
+
+        // ============================================================
+        // 6. 国際比較グラフ
+        // ============================================================
+        let intlChart = null;
+        let intlMode = 'ni';
+        let intlRows = [];
+
+        function intlSorted(mode) {
+            const key = mode === 'ni' ? 'total' : 'gdp';
+            return INTL.slice().sort((a, b) => b[key] - a[key]);
+        }
+        function intlLabel(c, i) {
+            return `${i + 1} ${c.name}${c.year !== 2023 ? '*' : ''}`;
+        }
+
+        const intlDecorPlugin = {
+            id: 'intlDecor',
+            beforeDatasetsDraw(chart) {
+                // 日本の行を帯で強調
+                const { ctx, chartArea, scales } = chart;
+                const idx = intlRows.findIndex(c => c.name === '日本');
+                if (idx < 0) return;
+                const y = scales.y.getPixelForValue(idx);
+                const h = scales.y.height / intlRows.length;
+                ctx.save();
+                ctx.fillStyle = 'rgba(37, 99, 235, 0.10)';
+                ctx.fillRect(chartArea.left, y - h / 2, chartArea.right - chartArea.left, h);
+                ctx.restore();
+            },
+            afterDatasetsDraw(chart) {
+                // 棒の先端に合計値
+                const { ctx } = chart;
+                const meta = chart.getDatasetMeta(chart.data.datasets.length - 1);
+                ctx.save();
+                ctx.textBaseline = 'middle';
+                ctx.textAlign = 'left';
+                ctx.fillStyle = COLORS.ink;
+                intlRows.forEach((c, i) => {
+                    const bar = meta.data[i];
+                    if (!bar) return;
+                    ctx.font = `${c.name === '日本' ? '700' : '500'} 10px ${FONT_FAMILY}`;
+                    ctx.fillText(fmt1(intlMode === 'ni' ? c.total : c.gdp), bar.x + 5, bar.y);
+                });
+                ctx.restore();
+            }
+        };
+
+        function intlConfig(mode) {
+            const rows = intlSorted(mode);
+            const common = { borderColor: '#ffffff', barThickness: 13 };
+            const datasets = mode === 'ni'
+                ? [
+                    Object.assign({ label: '租税負担率', data: rows.map(c => c.tax), backgroundColor: COLORS.nat, borderWidth: { right: 2 } }, common),
+                    Object.assign({ label: '社会保障負担率', data: rows.map(c => c.ss), backgroundColor: COLORS.ss, borderRadius: { topRight: 3, bottomRight: 3 } }, common)
+                ]
+                : [
+                    Object.assign({ label: '国民負担率（対GDP比）', data: rows.map(c => c.gdp), backgroundColor: COLORS.gdp, borderRadius: { topRight: 3, bottomRight: 3 } }, common)
+                ];
+            return { rows, labels: rows.map(intlLabel), datasets, max: mode === 'ni' ? 100 : 50 };
+        }
+
+        function updateIntlSubtitle(mode, rows) {
+            const rank = rows.findIndex(c => c.name === '日本') + 1;
+            $('intlSubtitle').textContent = (mode === 'ni' ? '対国民所得比' : '対GDP比') + `。日本は${rows.length}カ国中${rank}位`;
+        }
+
+        function buildIntlChart() {
+            const cfg = intlConfig(intlMode);
+            intlRows = cfg.rows;
+            const isJapan = index => intlRows[index] && intlRows[index].name === '日本';
+            intlChart = new Chart($('intlChart').getContext('2d'), {
+                type: 'bar',
+                data: { labels: cfg.labels, datasets: cfg.datasets },
+                plugins: [intlDecorPlugin],
+                options: {
+                    indexAxis: 'y',
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    layout: { padding: { right: 34 } },
+                    plugins: {
+                        legend: {
+                            position: 'top',
+                            align: 'start',
+                            labels: { usePointStyle: true, pointStyle: 'rect', boxWidth: 10, boxHeight: 10, padding: 14, font: { size: 11 } }
+                        },
+                        tooltip: {
+                            mode: 'index',
+                            intersect: false,
+                            callbacks: {
+                                title(items) {
+                                    const c = intlRows[items[0].dataIndex];
+                                    return `${c.name}（${c.year}年${c.name === '日本' ? '度' : ''}）`;
+                                },
+                                label(context) {
+                                    return ` ${context.dataset.label}: ${fmt1(context.raw)}%`;
+                                },
+                                afterBody(items) {
+                                    const c = intlRows[items[0].dataIndex];
+                                    return intlMode === 'ni'
+                                        ? ['', `国民負担率（対国民所得比）: ${fmt1(c.total)}%`, `参考・対GDP比: ${fmt1(c.gdp)}%`]
+                                        : ['', `参考・対国民所得比: ${fmt1(c.total)}%`];
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            stacked: true,
+                            min: 0,
+                            max: cfg.max,
+                            position: 'top',
+                            border: { display: false },
+                            ticks: { callback: v => v + '%', font: { size: 10 } },
+                            grid: { color: COLORS.grid }
+                        },
+                        y: {
+                            stacked: true,
+                            grid: { display: false },
+                            ticks: {
+                                autoSkip: false,
+                                color: ctx => isJapan(ctx.index) ? '#0f172a' : '#475569',
+                                font: ctx => ({ size: 11, weight: isJapan(ctx.index) ? '700' : '400' })
+                            }
+                        }
+                    }
+                }
+            });
+            updateIntlSubtitle(intlMode, cfg.rows);
+        }
+
+        function setIntlMode(mode) {
+            intlMode = mode;
+            const cfg = intlConfig(mode);
+            updateIntlSubtitle(mode, cfg.rows);
+            intlRows = cfg.rows;
+            if (!intlChart) return;
+            intlChart.data.labels = cfg.labels;
+            intlChart.data.datasets = cfg.datasets;
+            intlChart.options.scales.x.max = cfg.max;
+            intlChart.options.plugins.legend.display = mode === 'ni';
+            intlChart.update();
+        }
+
+        const intlButtons = Array.from(document.querySelectorAll('[data-intl]'));
+        intlButtons.forEach(btn => btn.addEventListener('click', () => {
+            setPressed(intlButtons, btn);
+            setIntlMode(btn.dataset.intl);
+        }));
+
+        // ============================================================
+        // 7. 表（グラフのテーブルビュー）
+        // ============================================================
+        function buildTable(table, headers, rows, highlight) {
+            const thead = el('thead', 'bg-slate-100 text-slate-600 sticky top-0');
+            const htr = el('tr');
+            headers.forEach(h => htr.appendChild(el('th', 'font-semibold', h)));
+            thead.appendChild(htr);
+            const tbody = el('tbody');
+            rows.forEach(cells => {
+                const tr = el('tr', highlight && highlight(cells) ? 'font-bold text-slate-900' : '');
+                cells.forEach(c => tr.appendChild(el('td', '', c)));
+                tbody.appendChild(tr);
+            });
+            table.appendChild(thead);
+            table.appendChild(tbody);
+        }
+
+        buildTable(
+            $('dataTable'),
+            ['年度', '区分', '国税', '地方税', '租税負担率', '社会保障負担率', '国民負担率', '財政赤字', '潜在的国民負担率', '国民負担率（対GDP比）', '国民所得（兆円）', 'GDP（兆円）'],
+            data.slice().reverse().map(d => [
+                `${d.year}（${eraLabel(d.year)}）`, d.status, fmt1(d.nat), fmt1(d.loc), fmt1(d.tax), fmt1(d.ss),
+                fmt1(d.burden), fmt1(d.deficit), fmt1(d.potential), fmt1(d.gdpRatio), fmt1(d.ni), fmt1(d.gdp)
+            ])
+        );
+        buildTable(
+            $('intlTable'),
+            ['順位・国（対国民所得比の高い順）', '対象年', '租税負担率', '社会保障負担率', '国民負担率', '対GDP比'],
+            INTL.map((c, i) => [`${i + 1} ${c.name}`, String(c.year), fmt1(c.tax), fmt1(c.ss), fmt1(c.total), fmt1(c.gdp)]),
+            cells => cells[0].endsWith('日本')
+        );
+        buildTable(
+            $('majorTable'),
+            ['国', '対象年', '租税負担率', '社会保障負担率', '国民負担率', '財政赤字', '潜在的国民負担率'],
+            MAJOR.map(m => [m[0], m[1], fmt1(m[2]), fmt1(m[3]), `${fmt1(m[4])} (${fmt1(m[7])})`, fmt1(m[5]), `${fmt1(m[6])} (${fmt1(m[8])})`]),
+            cells => cells[0] === '日本'
+        );
+
+        // ============================================================
+        // 8. グラフの初期化
+        // ============================================================
+        if (window.Chart) {
+            buildTrendChart();
+            buildIntlChart();
+        } else {
+            // CDN からライブラリを取得できない場合は表で代替
+            $('chartFallback').classList.remove('hidden');
+            $('trendChart').parentElement.classList.add('hidden');
+            $('intlChartWrap').classList.add('hidden');
+            $('dataDetails').open = true;
+            updateIntlSubtitle(intlMode, intlSorted(intlMode));
+        }
+
+        // ============================================================
+        // 9. 給与所得者シミュレーター（令和8年の税制・保険料率）
+        // ============================================================
+        const SIM = {
+            healthRate: 0.0990 / 2,        // 協会けんぽ 全国平均 9.90%（労使折半）
+            careRate: 0.0162 / 2,          // 介護保険 1.62%（40〜64歳、労使折半）
+            childSupportRate: 0.0023 / 2,  // 子ども・子育て支援金 0.23%（労使折半）
+            pensionRate: 0.183 / 2,        // 厚生年金 18.3%（労使折半）
+            employmentRate: 0.005,         // 雇用保険 労働者負担（一般の事業）
+            employmentRateEmployer: 0.0085,// 雇用保険 事業主負担（一般の事業）
+            healthCapMonthly: 1390000,     // 健康保険 標準報酬月額の上限
+            pensionCapMonthly: 650000,     // 厚生年金 標準報酬月額の上限
+            residentPerCapita: 5000        // 住民税 均等割4,000円＋森林環境税1,000円
+        };
+        const floorTo = (v, unit) => Math.floor(v / unit) * unit;
+
+        // 給与所得控除（令和8年分。最低保障69万円＋令和8・9年の特例5万円）
+        function salaryDeduction(gross) {
+            if (gross <= 2200000) return Math.min(gross, 740000);
+            if (gross <= 3600000) return gross * 0.3 + 80000;
+            if (gross <= 6600000) return gross * 0.2 + 440000;
+            if (gross <= 8500000) return gross * 0.1 + 1100000;
+            return 1950000;
+        }
+        // 所得税の基礎控除（令和8年分。本則62万円＋令和8・9年分の特例加算）
+        function basicDeductionIncomeTax(income) {
+            if (income <= 4890000) return 1040000;
+            if (income <= 6550000) return 670000;
+            if (income <= 23500000) return 620000;
+            if (income <= 24000000) return 480000;
+            if (income <= 24500000) return 320000;
+            if (income <= 25000000) return 160000;
+            return 0;
+        }
+        // 住民税の基礎控除
+        function basicDeductionResident(income) {
+            if (income <= 24000000) return 430000;
+            if (income <= 24500000) return 290000;
+            if (income <= 25000000) return 150000;
+            return 0;
+        }
+        // 配偶者控除 [所得税, 住民税, 調整控除の人的控除差]（本人の合計所得で逓減）
+        function spouseDeduction(income) {
+            if (income <= 9000000) return [380000, 330000, 50000];
+            if (income <= 9500000) return [260000, 220000, 40000];
+            if (income <= 10000000) return [130000, 110000, 20000];
+            return [0, 0, 0];
+        }
+        // 所得税の速算表（復興特別所得税を含まない）
+        function incomeTaxBase(taxable) {
+            if (taxable <= 1950000) return taxable * 0.05;
+            if (taxable <= 3300000) return taxable * 0.10 - 97500;
+            if (taxable <= 6950000) return taxable * 0.20 - 427500;
+            if (taxable <= 9000000) return taxable * 0.23 - 636000;
+            if (taxable <= 18000000) return taxable * 0.33 - 1536000;
+            if (taxable <= 40000000) return taxable * 0.40 - 2796000;
+            return taxable * 0.45 - 4796000;
+        }
+
+        function calculateTakeHome({ gross, spouse, dependents, specialDependents, over40 }) {
+            // 1. 社会保険料（賞与なし・年収÷12を月給とみなす）
+            const monthly = gross / 12;
+            const healthBase = Math.min(monthly, SIM.healthCapMonthly) * 12;
+            const pensionBase = Math.min(monthly, SIM.pensionCapMonthly) * 12;
+            const healthShare = SIM.healthRate + SIM.childSupportRate + (over40 ? SIM.careRate : 0);
+            const healthAndPension = healthBase * healthShare + pensionBase * SIM.pensionRate;
+            const social = Math.round(healthAndPension + gross * SIM.employmentRate);
+            const employerSocial = Math.round(healthAndPension + gross * SIM.employmentRateEmployer);
+
+            // 2. 給与所得
+            const income = Math.max(0, gross - salaryDeduction(gross));
+            const [spouseIT, spouseRT, spouseDiff] = spouse ? spouseDeduction(income) : [0, 0, 0];
+
+            // 3. 所得税（復興特別所得税 2.1% を含む）
+            const deductionsIT = social + basicDeductionIncomeTax(income) + spouseIT
+                + dependents * 380000 + specialDependents * 630000;
+            const taxableIT = floorTo(Math.max(0, income - deductionsIT), 1000);
+            const incomeTax = floorTo(incomeTaxBase(taxableIT) * 1.021, 100);
+
+            // 4. 住民税（翌年度課税分。所得割10%−調整控除＋均等割等）
+            const basicRT = basicDeductionResident(income);
+            const deductionsRT = social + basicRT + spouseRT + dependents * 330000 + specialDependents * 450000;
+            const taxableRT = floorTo(Math.max(0, income - deductionsRT), 1000);
+            let residentTax = 0;
+            if (taxableRT > 0) {
+                const diff = 50000 + spouseDiff + dependents * 50000 + specialDependents * 180000;
+                let adjustment = 0;
+                if (income <= 25000000) {
+                    adjustment = taxableRT <= 2000000
+                        ? Math.min(diff, taxableRT) * 0.05
+                        : Math.max(diff - (taxableRT - 2000000), 50000) * 0.05;
+                }
+                residentTax = floorTo(Math.max(0, taxableRT * 0.10 - adjustment), 100) + SIM.residentPerCapita;
+            }
+
+            const totalBurden = incomeTax + residentTax + social;
+            return { gross, social, employerSocial, incomeTax, residentTax, totalBurden, net: gross - totalBurden };
+        }
+
+        const salaryRange = $('salaryRange');
+        const spouseSelect = $('spouseSelect');
+        const dependentsSelect = $('dependentsSelect');
+        const specialDependentsSelect = $('specialDependentsSelect');
+        const ageSelect = $('ageSelect');
+        const man = v => (v / 10000).toFixed(1);
+
+        function simInputs() {
+            return {
+                gross: Number(salaryRange.value) * 10000,
+                spouse: spouseSelect.value === '1',
+                dependents: Number(dependentsSelect.value),
+                specialDependents: Number(specialDependentsSelect.value),
+                over40: ageSelect.value === 'over40'
+            };
+        }
+
+        function renderSimulator() {
+            const r = calculateTakeHome(simInputs());
+            const pct = v => (v / r.gross * 100);
+            $('salaryDisplay').textContent = `${Number(salaryRange.value).toLocaleString('ja-JP')} 万円`;
+            $('takeHomeSalary').textContent = Math.round(r.net / 10000).toLocaleString('ja-JP');
+            $('takeHomeRatio').textContent = pct(r.net).toFixed(1);
+            $('incomeTaxDisplay').textContent = `約 ${man(r.incomeTax)} 万円`;
+            $('residentTaxDisplay').textContent = `約 ${man(r.residentTax)} 万円`;
+            $('socialInsuranceDisplay').textContent = `約 ${man(r.social)} 万円`;
+            $('personalBurdenRatio').textContent = `約 ${pct(r.totalBurden).toFixed(1)}%`;
+            $('employerSocialDisplay').textContent = `約 ${man(r.employerSocial)} 万円`;
+            $('barNet').style.width = pct(r.net) + '%';
+            $('barIncomeTax').style.width = pct(r.incomeTax) + '%';
+            $('barResidentTax').style.width = pct(r.residentTax) + '%';
+            $('barSocial').style.width = pct(r.social) + '%';
+            $('compositionBar').setAttribute('aria-label',
+                `額面年収の内訳: 手取り ${pct(r.net).toFixed(1)}%、所得税 ${pct(r.incomeTax).toFixed(1)}%、住民税 ${pct(r.residentTax).toFixed(1)}%、社会保険料 ${pct(r.social).toFixed(1)}%`);
+        }
+
+        // スライダーの目盛り（つまみの移動範囲に合わせて配置）
+        (function renderSalaryTicks() {
+            const min = Number(salaryRange.min), max = Number(salaryRange.max);
+            [200, 600, 1000, 1500, 2000].forEach(v => {
+                const frac = (v - min) / (max - min);
+                const tick = el('span', 'absolute top-0 -translate-x-1/2', v.toLocaleString('ja-JP') + '万');
+                tick.style.left = `calc(10px + (100% - 20px) * ${frac})`;
+                if (frac === 0) { tick.className = 'absolute top-0'; tick.style.left = '0'; }
+                if (frac === 1) { tick.className = 'absolute top-0'; tick.style.left = 'auto'; tick.style.right = '0'; }
+                $('salaryTicks').appendChild(tick);
+            });
+        })();
+
+        // シミュレーターの入力を URL のハッシュに保存・復元（URL共有用）
+        const SIM_FIELDS = [
+            ['salary', salaryRange], ['spouse', spouseSelect], ['dep', dependentsSelect],
+            ['sdep', specialDependentsSelect], ['age', ageSelect]
+        ];
+        function restoreFromHash() {
+            const params = new URLSearchParams(window.location.hash.slice(1));
+            SIM_FIELDS.forEach(([key, input]) => {
+                const v = params.get(key);
+                if (v === null) return;
+                if (input.tagName === 'SELECT') {
+                    if (Array.from(input.options).some(o => o.value === v)) input.value = v;
+                } else if (Number(v) >= Number(input.min) && Number(v) <= Number(input.max)) {
+                    input.value = v;
+                }
+            });
+        }
+        function shareUrl() {
+            const params = new URLSearchParams();
+            SIM_FIELDS.forEach(([key, input]) => params.set(key, input.value));
+            return window.location.href.split('#')[0] + '#' + params.toString();
+        }
+
+        SIM_FIELDS.forEach(([, input]) => {
+            input.addEventListener(input.tagName === 'SELECT' ? 'change' : 'input', renderSimulator);
+        });
+        restoreFromHash();
+        renderSimulator();
+
+        // ============================================================
+        // 10. ヘッダーのボタン
+        // ============================================================
+        // URL共有（シミュレーターの入力条件つき）
+        $('copyUrlBtn').addEventListener('click', async function () {
+            const url = shareUrl();
+            let copied = false;
+            try {
+                await navigator.clipboard.writeText(url);
+                copied = true;
+            } catch (err) {
+                const tempInput = document.createElement('input');
+                tempInput.value = url;
+                document.body.appendChild(tempInput);
+                tempInput.select();
+                try { copied = document.execCommand('copy'); } catch (e) { copied = false; }
+                document.body.removeChild(tempInput);
+            }
+            const label = this.querySelector('span');
+            const original = 'URL共有';
+            label.textContent = copied ? 'コピー完了!' : 'コピー失敗';
+            setTimeout(() => { label.textContent = original; }, 2000);
         });
 
-        // Export CSV
-        document.getElementById('exportCsvBtn').addEventListener('click', function() {
-            let csvContent = "data:text/csv;charset=utf-8,\uFEFF"; // BOM for Excel
-            csvContent += "年度,国税負担率(%),地方税負担率(%),社会保障負担率(%),国民負担率合計(%),潜在的国民負担率(%)\n";
-
-            historicalData.forEach(row => {
-                const total = (row.nationalTax + row.localTax + row.socialSec).toFixed(1);
-                const potential = (parseFloat(total) + row.deficit).toFixed(1);
-                csvContent += `"${row.year}",${row.nationalTax},${row.localTax},${row.socialSec},${total},${potential}\n`;
+        // 推移CSV保存
+        $('exportCsvBtn').addEventListener('click', function () {
+            const header = ['年度', '和暦', '区分', '国税(%)', '地方税(%)', '租税負担率(%)', '社会保障負担率(%)', '国民負担率(%)',
+                '財政赤字(%)', '潜在的国民負担率(%)', '国民負担率_対GDP比(%)', '国民所得(兆円)', '国内総生産(兆円)'];
+            const lines = [header.join(',')];
+            data.forEach(d => {
+                lines.push([d.year, eraLabel(d.year, true), d.status, d.nat, d.loc, d.tax, d.ss, d.burden,
+                    d.deficit, d.potential, d.gdpRatio, d.ni, d.gdp].map((v, i) => i < 3 ? v : fmt1(v)).join(','));
             });
-
-            const encodedUri = encodeURI(csvContent);
-            const link = document.createElement("a");
-            link.setAttribute("href", encodedUri);
-            link.setAttribute("download", "japan_tax_burden_ratio_history.csv");
+            // BOM 付き UTF-8（Excel 対応）
+            const blob = new Blob(['﻿' + lines.join('\r\n') + '\r\n'], { type: 'text/csv;charset=utf-8' });
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = 'japan_national_burden_ratio_1970-2026.csv';
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
+            setTimeout(() => URL.revokeObjectURL(link.href), 1000);
         });
     </script>
 </body>
