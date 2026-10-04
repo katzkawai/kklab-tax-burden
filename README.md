@@ -6,6 +6,8 @@
 
 公開URL: https://katzkawai.org/kklab-tax-burden/
 
+解説論文: [paper/paper.pdf](paper/paper.pdf)（指標の読み方、データの出所、仕組み、公開方法、開発過程、拡張の構想）
+
 ## 表示内容
 
 - 最新指標（令和8年度見通し）: 国民負担率 45.7%、租税負担率 28.0%、社会保障負担率 17.6%、潜在的国民負担率 48.4%
@@ -39,9 +41,15 @@
 ## ファイル構成
 
 ```
-index.html   ダッシュボード本体（HTML・データ・スクリプトをすべて含む）
-README.md    このファイル
+index.html          ダッシュボード本体（HTML・データ・スクリプトをすべて含む）
+README.md           このファイル
+paper/paper.tex     解説論文（LuaLaTeX + jlreq）
+paper/paper.pdf     解説論文のPDF
+paper/figures/      論文に載せたアプリ画面の図
+paper/tables/       論文の表の本体（公表資料とアプリのデータから生成）
 ```
+
+論文は `paper/` で `latexmk -lualatex paper.tex` を実行するとビルドできます。
 
 外部ライブラリは CDN から読み込みます（Tailwind CSS、Chart.js 4.5.1、Google Fonts）。Chart.js を読み込めない環境では、グラフの代わりにデータ表を表示します。
 

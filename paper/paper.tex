@@ -1,0 +1,768 @@
+% LuaLaTeX + jlreq
+% ビルド: latexmk -lualatex paper.tex
+\documentclass[paper=a4,fontsize=10pt]{jlreq}
+
+\usepackage{amsmath,amssymb}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{longtable}
+\usepackage{capt-of}
+\usepackage{xcolor}
+\usepackage{listings}
+\usepackage{tikz}
+\usetikzlibrary{positioning,arrows.meta}
+\usepackage{flafter}
+\usepackage[haranoaji]{luatexja-preset}
+\usepackage{xurl}
+\usepackage[hidelinks,pdfusetitle]{hyperref}
+
+% 図表を本文の近くに置き，図表だけのページを減らす
+\renewcommand{\topfraction}{0.9}
+\renewcommand{\bottomfraction}{0.8}
+\renewcommand{\textfraction}{0.08}
+\renewcommand{\floatpagefraction}{0.8}
+\setcounter{topnumber}{3}
+\setcounter{totalnumber}{4}
+
+\lstset{
+  basicstyle=\ttfamily\small,
+  columns=fullflexible,
+  keepspaces=true,
+  breaklines=true,
+  frame=single,
+  framesep=4pt,
+  rulecolor=\color{black!30},
+  xleftmargin=1\zw,
+  xrightmargin=1\zw,
+  aboveskip=\medskipamount,
+  belowskip=\medskipamount
+}
+
+% 表の本体を読み込む（tabular 内で \input の直後に罫線を置けるようプリミティブを使う）
+\makeatletter
+\newcommand{\tabinput}[1]{\@@input #1 }
+\makeatother
+\newcommand{\code}[1]{\texttt{#1}}
+\newcommand{\man}{\,万円}
+
+\title{日本の国民負担率インタラクティブダッシュボード\\
+  --- データ，仕組み，公開方法と生成AIによる開発過程 ---}
+\author{河合勝彦\thanks{名古屋市立大学大学院経済学研究科．
+  E-mail: \texttt{kkawai@econ.nagoya-cu.ac.jp}}}
+\date{2026年10月4日}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+本稿は，日本の国民負担率（租税負担率と社会保障負担率の合計）を可視化するウェブアプリ
+「日本の国民負担率インタラクティブダッシュボード」の解説である。
+本アプリは，財務省が公表する1970〜2026年度の国民負担率の推移，税目別の内訳，
+OECD加盟35カ国との国際比較を図表で示し，あわせて給与所得者の所得税・住民税・社会保険料を
+令和8（2026）年の制度で概算するシミュレーターを備える。
+実装はビルドを要しない単一のHTMLファイルで，GitHub Pages から静的に配信している。
+開発では，Gemini 3.8 Flash が生成したプロトタイプを，Claude Fable 5.1 が一次資料と照合して修正・拡充した。
+プロトタイプは画面の体裁こそ整っていたが，推移データ13年度ぶんのうち内訳まで公式値と一致する年度は一つもなく，
+国民負担率の合計も最大で5.0ポイントずれていた。
+本稿では，指標の定義と読み方，データの出所，アプリの構成と計算モデル，公開の手順，
+二つのモデルによる開発と検証の過程，限界および拡張の構想を記す。
+\end{abstract}
+
+\noindent
+\textbf{キーワード}：国民負担率，租税負担率，社会保障負担率，潜在的国民負担率，
+データ可視化，GitHub Pages，生成AI\\
+\textbf{公開URL}：\url{https://katzkawai.org/kklab-tax-burden/}\\
+\textbf{ソースコード}：\url{https://github.com/katzkawai/kklab-tax-burden}
+
+\section{はじめに}
+
+国民負担率は，税と社会保険料の負担が国民所得に対してどれだけの大きさかを示す指標で，
+財務省が毎年公表している。令和8（2026）年度の見通しは45.7\%である\cite{mof2026}。
+この数字は「所得のおよそ半分が税と保険料に消える」という意味で受け取られやすい。
+しかし国民負担率は国全体を集計したマクロ指標であり，個人の給与から差し引かれる割合とは別のものである。
+分子には法人が納める税や消費税，社会保険料の事業主負担分が含まれ，
+分母の国民所得は国内総生産（GDP）より3割近く小さい。
+同じ負担を対GDP比で測れば32.7\%になる。
+
+本アプリの目的は，この指標の水準・推移・内訳・国際的な位置を一つの画面で確認できるようにし，
+あわせて個人の負担を別に計算して見せることで，マクロ指標と個人の負担の違いを具体的に示すことにある。
+授業や一般向けの説明で，その場で数値を確かめながら使うことを想定している。
+
+本稿の構成は次のとおりである。
+第\ref{sec:indicator}節で指標の定義と読み方を整理し，第\ref{sec:app}節でアプリの機能を，
+第\ref{sec:data}節でデータの出所を説明する。
+第\ref{sec:impl}節で実装とシミュレーターの計算モデルを，第\ref{sec:hosting}節で公開の方法を述べる。
+第\ref{sec:ai}節は Gemini 3.8 Flash と Claude Fable 5.1 による開発過程，第\ref{sec:verify}節は検証である。
+第\ref{sec:limits}節で限界を，第\ref{sec:extension}節で拡張の構想を述べる。
+
+\section{国民負担率という指標}\label{sec:indicator}
+
+\subsection{定義}
+
+租税負担（国税と地方税の合計）を $T$，社会保障負担を $S$，国および地方の財政赤字を $D$，
+国民所得を $\mathit{NI}$ とすると，財務省の定義は次のとおりである\cite{mof2026,mofa04}。
+\begin{align}
+  \text{国民負担率} &= \frac{T+S}{\mathit{NI}}\times 100
+    = \underbrace{\frac{T}{\mathit{NI}}\times 100}_{\text{租税負担率}}
+    + \underbrace{\frac{S}{\mathit{NI}}\times 100}_{\text{社会保障負担率}}, \label{eq:burden}\\
+  \text{潜在的国民負担率} &= \frac{T+S+D}{\mathit{NI}}\times 100. \label{eq:potential}
+\end{align}
+潜在的国民負担率は，財政赤字を将来世代に先送りされた負担とみなして加えたものである。
+加えるのは国債残高（ストック）ではなく，その年度の赤字（フロー）である。
+
+\subsection{分母の違い}
+
+国民所得（要素費用表示）とGDPの関係は
+\begin{equation}
+  \mathit{NI} = \mathit{GDP} + \text{海外からの所得の純受取} - \text{固定資本減耗}
+     - (\text{生産・輸入品に課される税} - \text{補助金})
+\end{equation}
+である。固定資本減耗と間接税（純）を除くため，国民所得はGDPより小さい。
+令和8年度見通しでは $\mathit{NI}/\mathit{GDP}=496.1/691.9\approx 0.717$ である。
+対国民所得比の値を $b^{\mathit{NI}}$ とすると，対GDP比は
+$b^{\mathit{GDP}} = b^{\mathit{NI}}\times \mathit{NI}/\mathit{GDP}$ で求まり，
+45.7\%は32.7\%に対応する。
+分子には消費税などの間接税が入るのに分母からは除かれるので，
+間接税の比重が大きい国ほど対国民所得比は高く出やすい。
+国際比較では両方の比率を見る必要がある。
+
+\subsection{読むときの注意}
+
+国民負担率を個人の負担率として読むのは，次の三点で適切でない。
+\begin{enumerate}
+  \item 分子には，個人が給与から直接支払わない負担が含まれる。
+    令和8年度見通しの45.7\%のうち，法人所得課税が7.1\%，消費課税が8.8\%を占める（表\ref{tab:breakdown}）。
+    社会保障負担17.6\%には事業主負担分が含まれる。
+  \item 分母の国民所得には，雇用者報酬だけでなく企業所得と財産所得が含まれる。
+  \item 負担した税と保険料は，年金・医療・介護などの給付や公共サービスとして国民に戻る。
+    負担率だけでは受益の大きさは分からない。
+\end{enumerate}
+したがって，$100\%$ から国民負担率を引いた値を「国民の手取り」と呼ぶことはできない。
+第\ref{sec:ai}節で述べるように，プロトタイプはこの読み方をグラフにしていた。
+
+\begin{table}[htbp]
+  \centering
+  \caption{国民負担率の内訳（令和8年度見通し，対国民所得比）}\label{tab:breakdown}
+  \begin{tabular}{llr}
+    \toprule
+    区分 & 主な税目など & 比率（\%）\\
+    \midrule
+    個人所得課税 & 所得税，個人住民税など & 8.5 \\
+    法人所得課税 & 法人税，法人住民税，法人事業税など & 7.1 \\
+    消費課税 & 消費税，酒税，揮発油税など & 8.8 \\
+    資産課税等 & 固定資産税，相続税など & 3.6 \\
+    \midrule
+    租税負担率 & 国税 18.1 ＋ 地方税 9.9 & 28.0 \\
+    社会保障負担率 & 社会保険料（本人負担＋事業主負担） & 17.6 \\
+    \midrule
+    国民負担率 & & 45.7 \\
+    財政赤字 & & 2.7 \\
+    潜在的国民負担率 & & 48.4 \\
+    \bottomrule
+  \end{tabular}
+
+  \smallskip
+  {\footnotesize 出所：財務省\cite{mof2026,mofa04}。四捨五入のため内訳の和は合計と一致しないことがある。}
+\end{table}
+
+\section{アプリの概要}\label{sec:app}
+
+本アプリは一つのページからなり，上から順に次の七つの部分で構成される。
+
+\begin{description}
+  \item[最新指標] 国民負担率，租税負担率，社会保障負担率，潜在的国民負担率の最新値を4枚のカードで示す。
+    国税・地方税の内訳，前年度比，対GDP比を添える。
+  \item[推移グラフ] 1970〜2026年度の全57年度について，国税・地方税・社会保障負担を積み上げ棒で，
+    潜在的国民負担率と対GDP比の国民負担率を折れ線で示す。
+    表示期間は全期間，1990年度以降，2010年度以降の三つから選べる。
+    実績見込みと見通しの年度は棒を淡色にして実績と区別する（図\ref{fig:overview}）。
+  \item[内訳] 最新年度の国民負担率を，税の種類別と社会保障負担に分けて横棒で示す。
+  \item[国際比較] OECD加盟35カ国の2023年の国民負担率を横棒で並べ，日本の行を強調する。
+    対国民所得比と対GDP比を切り替えると，順位が入れ替わる様子を確認できる（図\ref{fig:intl}）。
+    主要6カ国の潜在的国民負担率の表も付ける。
+  \item[解説] 分母の違い，上昇の主因，潜在的国民負担率の意味，個人の負担との違いの4点を文章で説明する。
+  \item[シミュレーター] 額面年収，配偶者控除の有無，扶養親族の人数，年齢区分を入力すると，
+    所得税・住民税・社会保険料と手取り額を概算する（図\ref{fig:sim}）。
+    国全体の社会保障負担率に含まれる事業主負担分も参考として表示する。
+  \item[データ表] グラフの元データを年度別の表で示す。同じ内容をCSVファイルとして保存できる。
+\end{description}
+
+このほか，シミュレーターの入力条件をURLに含めて共有する機能がある。
+画面幅に応じてレイアウトが変わり，スマートフォンでも閲覧できる。
+
+\begin{figure}[tbp]
+  \centering
+  \includegraphics[width=\linewidth]{figures/fig_overview.png}
+  \caption{最新指標のカード，推移グラフ，内訳}\label{fig:overview}
+\end{figure}
+
+\begin{figure}[tbp]
+  \centering
+  \includegraphics[width=0.92\linewidth]{figures/fig_intl.png}
+  \caption{国際比較（OECD加盟35カ国，2023年，対国民所得比）}\label{fig:intl}
+\end{figure}
+
+\begin{figure}[tbp]
+  \centering
+  \includegraphics[width=\linewidth]{figures/fig_simulator.png}
+  \caption{給与所得者の負担概算シミュレーター（年収600\man，単身，40歳未満の例）}\label{fig:sim}
+\end{figure}
+
+\section{データの出所}\label{sec:data}
+
+\subsection{出所の一覧}
+
+アプリが用いる数値は，すべて公的機関の公表資料から転記したものである（表\ref{tab:sources}）。
+独自の推計値は，シミュレーターの計算結果だけである。
+
+\begin{table}[htbp]
+  \centering
+  \caption{データの出所}\label{tab:sources}
+  \begin{tabular}{p{0.30\linewidth}p{0.62\linewidth}}
+    \toprule
+    内容 & 出所 \\
+    \midrule
+    国民負担率の推移（1970〜2026年度，11系列） &
+      財務省「令和8年度の国民負担率を公表します」（2026年3月5日）の資料「国民負担率（対国民所得比）の推移」\cite{mof2026} \\
+    国際比較（35カ国，主要6カ国） &
+      同上の資料「国民負担率の国際比較」「国民負担率の国際比較（OECD加盟35カ国）」\cite{mof2026} \\
+    租税負担率の税目別内訳 &
+      財務省「負担率に関する資料」の「国民負担率及び租税負担率の推移（対国民所得比）」\cite{mofa04} \\
+    所得税・住民税の控除額 &
+      財務省「令和8年度税制改正の大綱」\cite{taikou2026} \\
+    健康保険・介護保険・子ども・子育て支援金の料率 &
+      全国健康保険協会「令和8年度保険料率」\cite{kenpo2026} \\
+    雇用保険料率 &
+      厚生労働省「令和8（2026）年度 雇用保険料率のご案内」\cite{mhlw2026} \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\subsection{推移データ}
+
+推移データは，年度ごとに国税，地方税，租税負担率，社会保障負担率，国民負担率，財政赤字，
+潜在的国民負担率，国民負担率の対GDP比，国民所得，GDPの値を持つ。
+全年度の値を付録\ref{app:trend}に掲げる。主な年度を抜き出すと表\ref{tab:selected}のとおりである。
+
+\begin{table}[htbp]
+  \centering
+  \caption{国民負担率の推移（主な年度，\%）}\label{tab:selected}
+  \begin{tabular}{lrrrrrr}
+    \toprule
+    年度 & 租税 & 社会保障 & 国民負担率 & 財政赤字 & 潜在的 & 対GDP比 \\
+    \midrule
+    1970（昭45） & 18.9 & 5.4 & 24.3 & 0.5 & 24.9 & 19.7 \\
+    1980（昭55） & 21.7 & 8.8 & 30.5 & 8.2 & 38.7 & 25.0 \\
+    1990（平2） & 27.7 & 10.6 & 38.4 & 0.1 & 38.5 & 29.5 \\
+    2000（平12） & 22.5 & 12.9 & 35.4 & 9.5 & 44.9 & 25.5 \\
+    2010（平22） & 21.5 & 15.9 & 37.4 & 11.0 & 48.4 & 26.6 \\
+    2020（令2） & 27.9 & 19.4 & 47.3 & 15.3 & 62.6 & 32.4 \\
+    2024（令6，実績） & 28.2 & 18.5 & 46.7 & 3.6 & 50.3 & 32.9 \\
+    2025（令7，実績見込み） & 28.3 & 17.8 & 46.1 & 3.0 & 49.1 & 32.9 \\
+    2026（令8，見通し） & 28.0 & 17.6 & 45.7 & 2.7 & 48.4 & 32.7 \\
+    \bottomrule
+  \end{tabular}
+
+  \smallskip
+  {\footnotesize 出所：財務省\cite{mof2026}。対GDP比を除き対国民所得比。}
+\end{table}
+
+1980年度から2026年度見通しまでに国民負担率は30.5\%から45.7\%へ約15ポイント上昇した。
+このうち社会保障負担率が8.8\%から17.6\%へ8.8ポイント，租税負担率が21.7\%から28.0\%へ6.3ポイント上がっており，
+上昇の過半は社会保障負担による。
+潜在的国民負担率は，新型コロナウイルス感染症への対策で財政赤字が膨らんだ2020年度に62.6\%と，
+1970年度以降で最も高くなった。
+
+データを利用するうえで留意する点が四つある。
+\begin{enumerate}
+  \item 令和6（2024）年度までは実績，令和7年度は実績見込み，令和8年度は見通しである。
+    見通しは後に改定される。たとえば令和6年度の国民負担率は，2024年2月の公表時点では見通し45.1\%だったが\cite{mof2024}，
+    2026年3月公表の実績では46.7\%となった。
+  \item 平成6年度以降は08SNA，昭和55年度以降は93SNA，昭和54年度以前は68SNAにもとづく計数で，
+    基準の異なる年度の間は厳密には連続しない。国民所得とGDPは内閣府の国民経済計算\cite{sna}による。
+    租税負担は租税収入ベースで，SNAベースとは異なる。
+  \item 財政赤字は国および地方の財政収支の赤字で，一時的な特殊要因を除いた数値である。
+  \item 過去の年度の値も公表のたびに改定される。本アプリは2026年3月公表の値で全年度をそろえている。
+\end{enumerate}
+
+\subsection{国際比較データ}
+
+国際比較は2023年（日本は2023年度）の値で，ノルウェーは2022年，トルコは2020年である。
+OECD加盟38カ国のうち，オーストラリア，コロンビア，アイスランドはデータが得られないため対象外となっている。
+全35カ国の値を付録\ref{app:intl}に掲げる。
+
+日本の国民負担率は対国民所得比で45.7\%，35カ国中26位である。
+フランス（64.8\%），ドイツ（53.4\%），英国（49.8\%）より低く，米国（34.2\%）より高い。
+対GDP比では32.6\%で25位となる。
+分母の選び方の影響が大きいのはルクセンブルクとアイルランドである。
+ルクセンブルクは対国民所得比で92.7\%と1位だが，対GDP比では41.1\%で8位になる。
+アイルランドは対国民所得比で50.0\%の18位，対GDP比では22.1\%の33位である。
+いずれも国外へ流出する所得が大きく，GDPと国民所得の差が大きい国である。
+
+\section{仕組み}\label{sec:impl}
+
+\subsection{全体の構成}
+
+アプリの実体は \code{index.html} 一つ（約1,300行，84\,KB）である。
+HTML，スタイル，データ，描画と計算のスクリプトをすべてこのファイルに収めており，
+サーバー側の処理もビルドの工程もない。
+データは JavaScript の配列としてファイルに埋め込んでいるので，
+ブラウザでファイルを直接開くだけで動作する。
+外部から読み込むのは，スタイルの Tailwind CSS\cite{tailwind}，グラフ描画の Chart.js 4.5.1\cite{chartjs}，
+ウェブフォント（Inter，Noto Sans JP）の三つで，いずれもCDNから取得する。
+全体の流れを図\ref{fig:arch}に示す。
+
+\begin{figure}[tbp]
+  \centering
+  \begin{tikzpicture}[
+      font=\small,
+      node distance=10mm and 19mm,
+      box/.style={draw, rounded corners=2pt, align=center, inner sep=5pt, minimum height=11mm},
+      arr/.style={-{Stealth[length=2.2mm]}, semithick}]
+    \node[box] (src) {公表資料\\{\footnotesize 財務省・協会けんぽ・厚労省}};
+    \node[box, right=of src] (html) {\code{index.html}\\{\footnotesize データ配列＋スクリプト}};
+    \node[box, right=of html] (gh) {GitHub リポジトリ\\{\footnotesize \code{main} ブランチ}};
+    \node[box, below=of gh] (pages) {GitHub Pages\\{\footnotesize 静的配信}};
+    \node[box, below=of html] (browser) {閲覧者のブラウザ\\{\footnotesize 描画と計算を実行}};
+    \node[box, below=of src] (cdn) {CDN\\{\footnotesize Tailwind CSS・Chart.js}};
+    \draw[arr] (src) -- node[above]{\footnotesize 転記・検証} (html);
+    \draw[arr] (html) -- node[above]{\footnotesize push} (gh);
+    \draw[arr] (gh) -- node[right]{\footnotesize 自動デプロイ} (pages);
+    \draw[arr] (pages) -- node[above]{\footnotesize HTML} (browser);
+    \draw[arr] (cdn) -- node[above]{\footnotesize ライブラリ} (browser);
+  \end{tikzpicture}
+  \caption{データと配信の流れ}\label{fig:arch}
+\end{figure}
+
+\subsection{データの持ち方}
+
+スクリプトの冒頭に，次の五つのデータを定義している。
+\begin{description}
+  \item[\code{MOF\_ROWS}] 推移データ。1行が1年度で，年度と10個の数値を並べる。
+  \item[\code{FORECAST\_STATUS}] 実績見込み・見通しにあたる年度の指定。
+  \item[\code{BREAKDOWN}] 最新年度の内訳（表\ref{tab:breakdown}の上段）。
+  \item[\code{INTL}] 35カ国の租税負担率，社会保障負担率，国民負担率（対国民所得比・対GDP比），対象年。
+  \item[\code{MAJOR}] 主要6カ国の潜在的国民負担率。
+\end{description}
+推移データの1行は次の形をしている。
+\begin{lstlisting}
+// [year, national tax, local tax, tax ratio, social security ratio, burden ratio,
+//  deficit, potential burden ratio, burden ratio (GDP basis), NI, GDP]
+[2026, 18.1, 9.9, 28.0, 17.6, 45.7, 2.7, 48.4, 32.7, 496.1, 691.9],
+\end{lstlisting}
+租税負担率や国民負担率は内訳から計算できるが，アプリでは公表値をそのまま持たせている。
+四捨五入のため，内訳を足し合わせた値は公表された合計と0.1ポイントずれることがあるからである。
+最新指標のカードと表は，この配列の最終行から値を取り出して表示する。
+
+\subsection{グラフ}
+
+推移グラフと国際比較グラフは Chart.js で描く。
+推移グラフは，国税・地方税・社会保障負担の積み上げ棒と，潜在的国民負担率・対GDP比の2本の折れ線を一つの縦軸にのせる。
+右端には最新年度の値を，潜在的国民負担率の折れ線にはピーク（2020年度の62.6\%）を直接書き込む。
+これらのラベルと，国際比較グラフで日本の行に敷く帯，棒の先端の数値は，Chart.js のプラグインとして実装した。
+表示期間や分母を切り替えると，配列を絞り込み，または並べ替えてグラフを更新する。
+
+内訳の横棒はグラフ用ライブラリを使わず，HTMLの要素の幅で描いている。
+値の近い5項目を比べるには，円グラフより棒のほうが読み取りやすいためである。
+
+配色は，国税（藍），地方税（水色），社会保障負担（橙），潜在的国民負担率（赤の破線）で，
+色覚の多様性を想定した識別性の検査を通した。
+水色と橙は背景とのコントラストがやや低いので，色だけに頼らないよう，凡例，直接ラベル，表形式の代替表示を用意している。
+CDNからChart.jsを取得できない場合は，グラフの代わりに年度別データ表を開いて表示する。
+
+\subsection{シミュレーターの計算モデル}\label{sec:sim}
+
+シミュレーターは，令和8（2026）年の給与収入 $W$（年額）に対する社会保険料，所得税，住民税を概算する。
+所得税は令和8年分，住民税はその所得に対して翌年度（令和9年度）に課税される額である。
+以下，金額の単位は円とする。
+
+\paragraph{社会保険料}
+賞与はなく，月給は $W/12$ とみなす。標準報酬月額の上限は健康保険139\man，厚生年金65\man である。
+\begin{equation}
+  S = 12\Bigl[\min\bigl(\tfrac{W}{12},\,1{,}390{,}000\bigr)\,(h + c + k\,\mathbf{1}_{40\text{〜}64歳})
+      + \min\bigl(\tfrac{W}{12},\,650{,}000\bigr)\,p\Bigr] + eW .
+\end{equation}
+料率は表\ref{tab:rates}のとおりで，健康保険・介護保険・子ども・子育て支援金・厚生年金は労使折半後の本人負担分である。
+事業主負担の参考額は，$e$ を事業主の料率0.85\%に置き換えて求める（労災保険料と子ども・子育て拠出金は含めない）。
+
+\begin{table}[htbp]
+  \centering
+  \caption{シミュレーターの料率（令和8年度）}\label{tab:rates}
+  \begin{tabular}{llrr}
+    \toprule
+    記号 & 制度 & 全体の料率 & 本人負担 \\
+    \midrule
+    $h$ & 健康保険（協会けんぽ全国平均） & 9.90\% & 4.95\% \\
+    $c$ & 子ども・子育て支援金 & 0.23\% & 0.115\% \\
+    $k$ & 介護保険（40〜64歳） & 1.62\% & 0.81\% \\
+    $p$ & 厚生年金 & 18.3\% & 9.15\% \\
+    $e$ & 雇用保険（一般の事業） & 1.35\% & 0.5\% \\
+    \bottomrule
+  \end{tabular}
+
+  \smallskip
+  {\footnotesize 出所：全国健康保険協会\cite{kenpo2026}，厚生労働省\cite{mhlw2026}。厚生年金の料率は法定の18.3\%。}
+\end{table}
+
+\paragraph{給与所得}
+給与所得控除 $D(W)$ は，令和8年分の最低保障額69\man に令和8・9年の特例5\man を加えた74\man を下限とする\cite{taikou2026}。
+\begin{equation}
+  D(W)=
+  \begin{cases}
+    \min(W,\ 740{,}000) & W \le 2{,}200{,}000\\
+    0.3W + 80{,}000 & 2{,}200{,}000 < W \le 3{,}600{,}000\\
+    0.2W + 440{,}000 & 3{,}600{,}000 < W \le 6{,}600{,}000\\
+    0.1W + 1{,}100{,}000 & 6{,}600{,}000 < W \le 8{,}500{,}000\\
+    1{,}950{,}000 & W > 8{,}500{,}000
+  \end{cases}
+\end{equation}
+給与所得は $Y = W - D(W)$ である。
+
+\paragraph{所得税}
+基礎控除 $B(Y)$ は，本則62\man に令和8・9年分の特例加算を加えた額で，
+$Y\le 489\text{万}$ なら104\man，$489\text{万}<Y\le 655\text{万}$ なら67\man，
+$655\text{万}<Y\le 2{,}350\text{万}$ なら62\man である\cite{taikou2026}。
+人的控除の合計を $P$（配偶者控除38\man，扶養控除38\man，特定扶養控除63\man。
+配偶者控除は本人の所得が900\man を超えると逓減する）とすると，課税所得と税額は
+\begin{equation}
+  T_I = \bigl\lfloor \max(0,\ Y - S - B(Y) - P) \bigr\rfloor_{1000},\qquad
+  \text{所得税} = \bigl\lfloor 1.021\,\tau(T_I) \bigr\rfloor_{100}
+\end{equation}
+となる。$\lfloor\cdot\rfloor_{n}$ は $n$ 円未満の切り捨て，$\tau$ は5\%から45\%までの7段階の超過累進税率による速算表，
+係数1.021は復興特別所得税を表す。
+
+\paragraph{住民税}
+基礎控除は43\man，人的控除の合計を $P'$（配偶者控除33\man，扶養控除33\man，特定扶養控除45\man）とすると，
+\begin{equation}
+  T_R = \bigl\lfloor \max(0,\ Y - S - 430{,}000 - P') \bigr\rfloor_{1000},\qquad
+  \text{住民税} = \bigl\lfloor \max(0,\ 0.1\,T_R - A) \bigr\rfloor_{100} + 5{,}000
+\end{equation}
+である。5,000円は均等割と森林環境税，$A$ は調整控除で，所得税と住民税の人的控除額の差の合計を $\Delta$ として
+\begin{equation}
+  A=
+  \begin{cases}
+    0.05\,\min(\Delta,\ T_R) & T_R \le 2{,}000{,}000\\
+    0.05\,\max\bigl(\Delta-(T_R-2{,}000{,}000),\ 50{,}000\bigr) & T_R > 2{,}000{,}000
+  \end{cases}
+\end{equation}
+とする。
+
+\paragraph{計算例}
+単身・40歳未満の場合の結果を表\ref{tab:sim}に示す。
+年収600\man では手取りは466.1\man（77.7\%）で，負担の内訳は社会保険料88.3\man，住民税30.7\man，所得税14.9\man の順に大きい。
+個人の負担率は22.3\%で，国民負担率45.7\%の半分ほどである。
+会社が別に負担する社会保険料は90.4\man で，これを含めて見ると負担は額面の外側にも存在する。
+負担率は年収とともに上がり，年収2,000\man では35.0\%になる。
+
+\begin{table}[htbp]
+  \centering
+  \caption{シミュレーターの計算例（単身，40歳未満，単位：万円）}\label{tab:sim}
+  \begin{tabular}{rrrrrrrr}
+    \toprule
+    年収 & 社会保険料 & 所得税 & 住民税 & 手取り & 手取り率（\%） & 負担率（\%） & 事業主負担 \\
+    \midrule
+    \tabinput{tables/tab_sim.tex}
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+このモデルでは，年収が約665\man（給与所得489\man）を超えると基礎控除の特例加算が42\man から5\man に縮小するため，
+所得税額が不連続に増える。
+年収665\man と666\man を比べると，手取りは約512.8\man から約509.8\man へ約3\man 減る。
+これは大綱の規定をそのまま適用した結果である。
+
+\section{ホスティング}\label{sec:hosting}
+
+\subsection{GitHub Pages による公開}
+
+アプリは GitHub Pages\cite{ghpages}で公開している。
+リポジトリの \code{main} ブランチの最上位に \code{index.html} を置き，
+Pages の公開元を「ブランチから配信」（\code{main} の \code{/}）に設定するだけである。
+以後は \code{main} へ push するたびに，1分ほどで公開サイトに反映される。
+GitHub CLI を使う場合の手順は次のとおりである（\code{USER} は GitHub のアカウント名）。
+\begin{lstlisting}
+git init -b main
+git add index.html README.md
+git commit -m "Initial commit"
+gh repo create USER/kklab-tax-burden --public --source=. --remote=origin --push
+gh api -X POST repos/USER/kklab-tax-burden/pages \
+   -f "source[branch]=main" -f "source[path]=/"
+\end{lstlisting}
+ウェブ画面から設定する場合は，リポジトリの Settings → Pages で同じ公開元を選ぶ。
+公開URLは既定では \code{https://USER.github.io/kklab-tax-burden/} となる。
+著者のアカウントには独自ドメインを割り当てているため，
+本アプリのURLは \url{https://katzkawai.org/kklab-tax-burden/} である。
+
+\subsection{ほかの公開方法とローカルでの利用}
+
+サーバー側の処理がないので，静的ファイルを配信できる環境であればどこにでも置ける。
+\code{index.html} をウェブサーバーの公開ディレクトリにコピーすれば足りる。
+ローカルでは，ファイルをブラウザで直接開けば動作する。
+インターネットに接続していない場合，スタイルとグラフは読み込めないが，
+数値のカード，表，シミュレーターの計算は動く。
+
+\subsection{データの更新}
+
+財務省は毎年2〜3月ごろに新年度の見通しを公表し，あわせて過去の年度の値も改定する。
+更新の際は，\code{MOF\_ROWS} を全年度ぶん差し替え，\code{FORECAST\_STATUS}，\code{BREAKDOWN}，
+\code{INTL}，\code{MAJOR} を新しい資料の値に書き換える。
+シミュレーターは，料率を定数 \code{SIM} に，控除額を関数にまとめてあるので，制度改正に応じてそこを直す。
+本文中の年度や数値（解説，見出し，出典）も確認が必要である。
+手順はリポジトリの \code{README.md} に記してある。
+
+\section{開発過程：Gemini 3.8 Flash と Claude Fable 5.1}\label{sec:ai}
+
+本アプリは，二つの生成AIモデルを段階を分けて用いて作成した。
+プロトタイプを Google の Gemini 3.8 Flash が生成し，
+それを Anthropic の Claude Fable 5.1 が精査・修正・拡充した。
+このことはアプリのフッターと \code{README.md} にも明記している。
+リポジトリの最初のコミットがプロトタイプ，2番目のコミットが修正版にあたるので，
+両者の差は履歴から確認できる。
+
+\subsection{プロトタイプ（Gemini 3.8 Flash）}
+
+プロトタイプは654行，約38\,KBの単一HTMLファイルで，
+Tailwind CSS と Chart.js を用いた画面構成，4枚の指標カード，推移グラフ，ドーナツグラフ，
+年収シミュレーター，3項目の解説，CSV保存とURLコピーの機能を備えていた。
+配色やレイアウトは整っており，そのまま公開できそうに見える完成度であった。
+修正版も，この画面構成と配色を引き継いでいる。
+
+\subsection{修正と拡充（Claude Fable 5.1）}
+
+修正には，コーディングエージェント Claude Code 上で Claude Fable 5.1 を用いた。
+著者の指示は「内容を精査し，間違いを直し，内容を補強し，公開する」というものである。
+モデルは財務省のウェブサイトから公表資料のPDFを取得し，表を文字として抽出して，
+プロトタイプの数値と照合した。見つかった問題は次のとおりである。
+
+\paragraph{推移データの不一致}
+プロトタイプの推移データは13年度ぶんで，表\ref{tab:proto}に公式値と並べて示す。
+国税・地方税・社会保障負担・財政赤字の4項目がすべて公式値と一致する年度は一つもなかった。
+国民負担率の合計が2026年3月公表値と一致するのは1980年度だけで，1990年度は43.4\%と公式値38.4\%を5.0ポイント上回っていた。
+プロトタイプは最新年度を「令和6年度見通し」としていたので，2024年2月公表の値\cite{mof2024}とも照合した。
+こちらとは合計が5年度で一致したが，内訳はやはりどの年度も一致しなかった。
+たとえば1980年度は，合計30.5\%は正しいものの，国税16.7\%（公式値13.9\%），社会保障負担6.0\%（同8.8\%）と内訳が異なり，
+解説文の「社会保障負担率は約8\%」とも食い違っていた。
+ずれの原因は特定していないが，一次資料を参照せずに数値が生成されたものと考えられる。
+
+\begin{table}[htbp]
+  \centering
+  \caption{プロトタイプの推移データと財務省公表値の比較（\%）}\label{tab:proto}
+  {\footnotesize
+  \begin{tabular}{r|rrrrr|rrrrr|r}
+    \toprule
+    & \multicolumn{5}{c|}{プロトタイプ} & \multicolumn{5}{c|}{公表値（2026年3月）} & 2024年2月 \\
+    年度 & 国税 & 地方税 & 社保 & 合計 & 潜在的 & 国税 & 地方税 & 社保 & 合計 & 潜在的 & 公表の合計 \\
+    \midrule
+    \tabinput{tables/tab_proto.tex}
+    \bottomrule
+  \end{tabular}}
+
+  \smallskip
+  {\footnotesize 合計は国民負担率，社保は社会保障負担率，潜在的は潜在的国民負担率。
+  プロトタイプの合計と潜在的は，その内訳を足し合わせた値。出所：財務省\cite{mof2026,mof2024}。}
+\end{table}
+
+\paragraph{指標の読み方の誤り}
+プロトタイプのドーナツグラフは「国民所得の内訳構造」と題し，
+$100\%$ から国民負担率を引いた54.9\%を「国民手残り（可処分）」として示していた。
+第\ref{sec:indicator}節で述べたとおり，この読み方は成り立たない。
+修正版では，税の種類別と社会保障負担の内訳を示す横棒に置き換え，
+個人の負担率との違いを解説に加えた。
+
+\paragraph{解説文の誤り}
+対GDP比の説明で欧州諸国を「40〜50\%超」としていたが，対GDP比で50\%を超える国はない。
+日本を「中位」としていたが，35カ国中26位である。
+潜在的国民負担率に加える財政赤字を「国の借金」と説明していたが，加えるのは単年度の赤字である。
+「実質50\%を超えている」という記述は，令和8年度見通しの48.4\%と合わない。
+
+\paragraph{リンク切れと最新性}
+出典として示していた財務省のページは存在しないURLであった。
+指標は令和6年度見通しのままで，その後に公表された2年度ぶんが反映されていなかった。
+
+\paragraph{シミュレーター}
+税制は令和2〜6年分のもの（基礎控除48\man，給与所得控除の最低額55\man）であった。
+社会保険料は年収に一律14.5\%（40歳以上は15.5\%）を掛けており，標準報酬月額の上限を考慮していなかった。
+このため年収2,000\man では社会保険料が290.0\man と，上限を反映した165.9\man の1.7倍になり，
+手取りは1,224.8\man（61.2\%）と，修正版の1,299.7\man（65.0\%）より約75\man 少なく計算されていた。
+扶養家族は「配偶者・子など」を区別せず一律38\man の控除としており，
+扶養控除の対象にならない16歳未満の子も数える作りだった。
+修正版では第\ref{sec:sim}節のモデルに改めた。
+
+\medskip
+修正に加えて，全57年度への拡張，国際比較，年度別データ表，表示期間の切り替え，
+事業主負担の表示，入力条件つきのURL共有を追加した。
+
+\subsection{この事例から言えること}
+
+一つの事例にすぎないが，次の点は統計を扱うアプリを生成AIで作るときの参考になる。
+
+第一に，体裁の完成度と内容の正確さは別である。
+プロトタイプの画面は整っており，数値ももっともらしい大きさだった。
+合計が合っていて内訳が違う年度もあり，見た目や桁の感覚から誤りに気づくことは難しい。
+
+第二に，照合の対象を一次資料に置くことで，誤りは機械的に見つかる。
+修正の段階では，公表資料の表を抽出し，57年度ぶんについて
+「国税＋地方税＝租税負担率」「租税負担率＋社会保障負担率＝国民負担率」などの関係が
+四捨五入の範囲で成り立つことを確かめたうえで，アプリのデータとした。
+
+第三に，生成と検証を分けることに意味がある。
+プロトタイプを作ったモデルと，それを点検したモデルは別であり，
+点検は誤りを見つけて直すことを目的に，資料の取得と照合という生成とは異なる作業として行われた。
+ただし修正版もAIの出力であることに変わりはない。
+第\ref{sec:verify}節の検証と第\ref{sec:limits}節の限界は，その前提で読まれたい。
+
+\section{検証}\label{sec:verify}
+
+修正版について，次の確認を行った。
+\begin{itemize}
+  \item \textbf{データの一致}：アプリ内の推移データ57行が，財務省のPDFから抽出した値と全項目で一致することをスクリプトで確かめた。
+    国際比較35カ国は，資料の図から読み取った値の個数と並びを，文字として抽出した値と突き合わせた。
+  \item \textbf{計算}：シミュレーターの計算関数を取り出して実行し，年収600\man のケースが手計算と一致すること，
+    給与収入178\man で所得税がゼロになること（課税最低限）を確かめた。
+  \item \textbf{表示}：ヘッドレスブラウザ（Chromium）で幅1,280ピクセルと390ピクセルの画面を描画し，
+    スクリプトのエラーと横方向のはみ出しがないこと，期間と分母の切り替え，CSV保存，URLからの入力復元，
+    Chart.jsを読み込めない場合の代替表示が動くことを確かめた。
+    最初の描画では対GDP比の折れ線が誤って積み上がる不具合が見つかり，修正した。
+  \item \textbf{出典}：出典として掲げたURLがすべて取得できることを確かめた。
+\end{itemize}
+
+\section{限界}\label{sec:limits}
+
+\begin{itemize}
+  \item シミュレーターは概算である。賞与，勤務先の健康保険組合や都道府県ごとの料率，
+    配偶者特別控除，所得金額調整控除，各種の所得控除・税額控除，住民税の非課税限度額を扱っていない。
+    消費税などの間接税の負担も含まない。
+  \item シミュレーターの所得税・住民税は「令和8年度税制改正の大綱」にもとづく。
+    成立した法令の条文とは照合していない。
+  \item データは手作業で転記したもので，公表値の改定に自動では追随しない。
+    本稿の数値は2026年10月4日時点で確認したものである。
+  \item 表示は外部のCDNに依存する。Tailwind CSS のCDN版は開発用途向けとされており\cite{tailwind}，
+    長期の安定運用には向かない。
+  \item 国民負担率は負担の側だけを見る指標で，本アプリも受益の側（社会保障給付など）を示していない。
+\end{itemize}
+
+\section{拡張の構想}\label{sec:extension}
+
+今後の拡張として，次の六つを考えている。
+
+\paragraph{(1) データ更新の自動化}
+今回の修正で行った「PDFの取得→表の抽出→整合性の検査」をスクリプトとしてリポジトリに置き，
+データを \code{index.html} から JSON ファイルに分離する。
+GitHub Actions で定期的に実行すれば，財務省の公表にあわせて差分を検出し，更新案を自動で作ることができる。
+
+\paragraph{(2) 公表時点ごとの比較}
+財務省の値は公表のたびに改定される。令和6年度の国民負担率は見通し45.1\%から実績46.7\%へ1.6ポイント上がった。
+過去の公表資料を公表時点ごとに蓄積し，見通し・実績見込み・実績の改定幅を可視化すれば，
+見通しの数字をどの程度の幅をもって読むべきかを示せる。
+
+\paragraph{(3) 受益の側の表示}
+社会保障給付費や公的な教育・医療支出を国民所得比・GDP比で並べ，負担と給付を対にして示す。
+国際比較でも，負担率の高い国が給付の面でどう違うかを同じ画面で見られるようにする。
+
+\paragraph{(4) シミュレーターの拡充}
+賞与，都道府県別・健康保険組合別の料率，配偶者特別控除，児童手当を扱えるようにする。
+年収を横軸にとった手取り率と限界的な負担率の曲線を描けば，
+第\ref{sec:sim}節で触れた年収665\man 付近の不連続や，いわゆる年収の壁を図で示せる。
+事業主負担を含めた人件費全体に対する負担の割合（税のくさび）や，
+家計の消費支出から推計した消費税負担を加えると，マクロの国民負担率との橋渡しがしやすくなる。
+制度年を切り替えて，税制改正の前後を比較する機能も考えられる。
+
+\paragraph{(5) 国際比較の時系列化と税目別比較}
+現在の国際比較は単年の値である。OECD の統計を用いて時系列にし，
+個人所得課税・法人所得課税・消費課税・資産課税等の構成を国ごとに比べられるようにする。
+
+\paragraph{(6) 配信と利用の改善}
+ライブラリをリポジトリに同梱し，スタイルをビルド済みのCSSに置き換えて，CDNへの依存をなくす。
+英語版，ダークモード，印刷用の表示を加える。
+授業での利用に向けて，保険料率や税率を動かしたときに国民負担率がどう変わるかを試せる
+シナリオ機能と，演習用の設問を用意する。
+
+\medskip
+開発方法の面では，複数のモデルに同じ指示でプロトタイプを作らせ，
+数値を一次資料と機械的に照合して正確さを比べる評価が考えられる。
+第\ref{sec:ai}節の照合の手順はそのまま評価の手続きとして使える。
+
+\section{おわりに}
+
+本稿では，日本の国民負担率インタラクティブダッシュボードについて，
+指標の読み方，データの出所，実装，公開方法，開発過程を説明した。
+アプリは単一のHTMLファイルで，公的機関の公表値をそのまま収録し，GitHub Pages で公開している。
+開発では Gemini 3.8 Flash のプロトタイプを Claude Fable 5.1 が一次資料と照合して修正した。
+プロトタイプの数値の大半が公式値と合わなかったという事実は，
+生成AIで統計を扱うものを作るときには，一次資料との照合を工程として組み込む必要があることを示している。
+
+\section*{生成AIの利用について}
+
+本アプリのプロトタイプは Gemini 3.8 Flash が，修正版は Claude Fable 5.1 が作成した。
+本稿の草稿の作成にも Claude Fable 5.1 を用いた。内容についての責任は著者にある。
+
+\begin{thebibliography}{99}
+  \bibitem{mof2026} 財務省（2026）「令和8年度の国民負担率を公表します」2026年3月5日．
+    \url{https://www.mof.go.jp/policy/budget/topics/futanritsu/20260305.html}
+  \bibitem{mofa04} 財務省「負担率に関する資料」．
+    \url{https://www.mof.go.jp/tax_policy/summary/condition/a04.htm}
+  \bibitem{mof2024} 財務省（2024）「令和6年度の国民負担率を公表します」2024年2月9日．
+    \url{https://www.mof.go.jp/policy/budget/topics/futanritsu/20240209.html}
+  \bibitem{taikou2026} 財務省「令和8年度税制改正の大綱」．
+    \url{https://www.mof.go.jp/tax_policy/tax_reform/outline/fy2026/08taikou_01.htm}
+  \bibitem{kenpo2026} 全国健康保険協会「令和8年度保険料率」．
+    \url{https://www.kyoukaikenpo.or.jp/about/business/insurance_rate/rate_prefectures/r08/index.html}
+  \bibitem{mhlw2026} 厚生労働省「令和8（2026）年度 雇用保険料率のご案内」．
+    \url{https://www.mhlw.go.jp/content/001692566.pdf}
+  \bibitem{sna} 内閣府経済社会総合研究所「国民経済計算（GDP統計）」．
+    \url{https://www.esri.cao.go.jp/jp/sna/menu.html}
+  \bibitem{chartjs} Chart.js．\url{https://www.chartjs.org/}
+  \bibitem{tailwind} Tailwind CSS, ``Play CDN''．
+    \url{https://tailwindcss.com/docs/installation/play-cdn}
+  \bibitem{ghpages} GitHub「GitHub Pages のドキュメント」．
+    \url{https://docs.github.com/ja/pages}
+\end{thebibliography}
+
+\clearpage
+\appendix
+
+\section{年度別データ}\label{app:trend}
+
+\begin{center}
+  \captionof{table}{国民負担率（対国民所得比）の推移}\label{tab:trend}
+\end{center}
+\vspace{-\baselineskip}
+{\footnotesize
+\begin{longtable}{rlrrrrrrrrrr}
+  \toprule
+  年度 & 和暦 & 国税 & 地方税 & 租税 & 社会保障 & 国民負担率 & 財政赤字 & 潜在的 & 対GDP比 & 国民所得 & GDP \\
+  \midrule
+  \endfirsthead
+  \toprule
+  年度 & 和暦 & 国税 & 地方税 & 租税 & 社会保障 & 国民負担率 & 財政赤字 & 潜在的 & 対GDP比 & 国民所得 & GDP \\
+  \midrule
+  \endhead
+  \bottomrule
+  \endfoot
+  \tabinput{tables/tab_trend.tex}
+\end{longtable}
+}
+\addtocounter{table}{-1}% longtable 自身が進めた表番号を戻す（見出しは \captionof で付けている）
+\noindent{\footnotesize
+単位は，国民所得とGDPが兆円，その他は\%。$\dagger$は実績見込み，$\ddagger$は見通し。出所：財務省\cite{mof2026}。}
+
+\section{国際比較データ}\label{app:intl}
+
+\begin{table}[htbp]
+  \centering
+  \caption{国民負担率の国際比較（OECD加盟35カ国，2023年，\%）}\label{tab:intl}
+  {\footnotesize
+  \begin{tabular}{rlrrrrr}
+    \toprule
+    順位 & 国 & 租税負担率 & 社会保障負担率 & 国民負担率 & 対GDP比 & 対GDP比の順位 \\
+    \midrule
+    \tabinput{tables/tab_intl.tex}
+    \bottomrule
+  \end{tabular}}
+
+  \smallskip
+  {\footnotesize 順位は対国民所得比の高い順。$*$ ノルウェーは2022年，トルコは2020年。日本は2023年度。出所：財務省\cite{mof2026}。}
+\end{table}
+
+\end{document}
