@@ -24,6 +24,16 @@
 \renewcommand{\floatpagefraction}{0.8}
 \setcounter{topnumber}{3}
 \setcounter{totalnumber}{4}
+% 図表と本文の間隔（jlreq の既定は行間1つぶんで詰まって見えるため広げる）
+\setlength{\textfloatsep}{1.5\baselineskip plus 0.5\baselineskip minus 0.2\baselineskip}
+\setlength{\intextsep}{1.3\baselineskip plus 0.4\baselineskip minus 0.2\baselineskip}
+\setlength{\floatsep}{1.3\baselineskip plus 0.4\baselineskip minus 0.2\baselineskip}
+% 表の見出しと上の罫線の間隔
+\setlength{\abovetopsep}{4pt}
+% フロートにしない表：前後に本文との間隔をとり，見出しと本体を同じページに保つ
+\newenvironment{heretable}
+  {\par\addvspace{\intextsep}\noindent\begin{minipage}{\linewidth}\centering}
+  {\end{minipage}\par\addvspace{\intextsep}}
 
 \lstset{
   basicstyle=\ttfamily\small,
@@ -786,7 +796,7 @@ GitHub Actions で定期的に実行すれば，財務省の公表にあわせ�
 \section{国際比較データ}\label{app:intl}
 
 % 付録の表は見出しの直後に置く（フロートにしない）
-\begin{center}
+\begin{heretable}
   \captionof{table}{国民負担率の国際比較（OECD加盟35カ国，2023年，\%）}\label{tab:intl}
   {\footnotesize
   \begin{tabular}{rlrrrrr}
@@ -799,7 +809,7 @@ GitHub Actions で定期的に実行すれば，財務省の公表にあわせ�
 
   \smallskip
   {\footnotesize 順位は対国民所得比の高い順。$*$ ノルウェーは2022年，トルコは2020年。日本は2023年度。出所：財務省\cite{mof2026}。}
-\end{center}
+\end{heretable}
 
 \clearpage
 
@@ -906,9 +916,7 @@ Current Version ID: 8ea38ed8-e8f4-48f6-8e1f-5a94824114f7
 公開するつもりのファイルだけが配信され，それ以外は存在しない扱いになっている。
 あわせてヘッドレスブラウザでページを開き，スクリプトのエラーがないこと，グラフとシミュレーターが動くことを確かめた。
 
-\begin{center}
-\begin{minipage}{\linewidth}
-  \centering
+\begin{heretable}
   \captionof{table}{公開後の応答（Cloudflare Workers）}\label{tab:cfcheck}
   \begin{tabular}{lll}
     \toprule
@@ -922,8 +930,7 @@ Current Version ID: 8ea38ed8-e8f4-48f6-8e1f-5a94824114f7
     \code{/paper/paper.tex} & 404 & 配信しない \\
     \bottomrule
   \end{tabular}
-\end{minipage}
-\end{center}
+\end{heretable}
 
 \subsection{更新，履歴，取り消し}
 
@@ -996,9 +1003,7 @@ Cloudflare で管理しているドメインがあれば，そのサブドメイ
 現在は GitHub Pages のURLを指定している。
 Tailwind CSS，Chart.js，フォントをCDNから読み込む点は，どちらの公開先でも変わらない。
 
-\begin{center}
-\begin{minipage}{\linewidth}
-  \centering
+\begin{heretable}
   \captionof{table}{GitHub Pages と Cloudflare Workers の比較（本アプリの場合）}\label{tab:hosting}
   {\small
   \begin{tabular}{p{0.20\linewidth}p{0.35\linewidth}p{0.35\linewidth}}
@@ -1014,7 +1019,6 @@ Tailwind CSS，Chart.js，フォントをCDNから読み込む点は，どちら
     取り消し & コミットを戻して push & \code{wrangler rollback} \\
     \bottomrule
   \end{tabular}}
-\end{minipage}
-\end{center}
+\end{heretable}
 
 \end{document}
