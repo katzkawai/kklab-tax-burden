@@ -61,7 +61,7 @@
 本アプリは，財務省が公表する1970〜2026年度の国民負担率の推移，税目別の内訳，
 OECD加盟35カ国との国際比較を図表で示し，あわせて給与所得者の所得税・住民税・社会保険料を
 令和8（2026）年の制度で概算するシミュレーターを備える。
-実装はビルドを要しない単一のHTMLファイルで，GitHub Pages から静的に配信している。
+実装はビルドを要しない単一のHTMLファイルで，GitHub Pages と Cloudflare Workers から静的に配信している。
 開発では，Gemini 3.8 Flash が生成したプロトタイプを，Claude Fable 5.1 が一次資料と照合して修正・拡充した。
 プロトタイプは画面の体裁こそ整っていたが，推移データ13年度ぶんのうち内訳まで公式値と一致する年度は一つもなく，
 国民負担率の合計も最大で5.0ポイントずれていた。
@@ -72,7 +72,8 @@ OECD加盟35カ国との国際比較を図表で示し，あわせて給与所�
 \noindent
 \textbf{キーワード}：国民負担率，租税負担率，社会保障負担率，潜在的国民負担率，
 データ可視化，GitHub Pages，生成AI\\
-\textbf{公開URL}：\url{https://katzkawai.org/kklab-tax-burden/}\\
+\textbf{公開URL}：\url{https://katzkawai.org/kklab-tax-burden/}（GitHub Pages），
+\url{https://kklab-tax-burden.katzkawai.workers.dev}（Cloudflare Workers）\\
 \textbf{ソースコード}：\url{https://github.com/katzkawai/kklab-tax-burden}
 
 \section{はじめに}
@@ -92,7 +93,8 @@ OECD加盟35カ国との国際比較を図表で示し，あわせて給与所�
 本稿の構成は次のとおりである。
 第\ref{sec:indicator}節で指標の定義と読み方を整理し，第\ref{sec:app}節でアプリの機能を，
 第\ref{sec:data}節でデータの出所を説明する。
-第\ref{sec:impl}節で実装とシミュレーターの計算モデルを，第\ref{sec:hosting}節で公開の方法を述べる。
+第\ref{sec:impl}節で実装とシミュレーターの計算モデルを，第\ref{sec:hosting}節で公開の方法を述べる
+（Cloudflare Workers での公開の詳細は付録\ref{app:cloudflare}）。
 第\ref{sec:ai}節は Gemini 3.8 Flash と Claude Fable 5.1 による開発過程，第\ref{sec:verify}節は検証である。
 第\ref{sec:limits}節で限界を，第\ref{sec:extension}節で拡張の構想を述べる。
 
@@ -477,10 +479,15 @@ $655\text{万}<Y\le 2{,}350\text{万}$ なら62\man である\cite{taikou2026}�
 \subsection{GitHub Pages による公開}
 
 アプリは GitHub Pages\cite{ghpages}で公開している。
-リポジトリの \code{main} ブランチの最上位に \code{index.html} を置き，
-Pages の公開元を「ブランチから配信」（\code{main} の \code{/}）に設定するだけである。
-以後は \code{main} へ push するたびに，1分ほどで公開サイトに反映される。
-GitHub CLI を使う場合の手順は次のとおりである（\code{USER} は GitHub のアカウント名）。
+GitHub Pages は，リポジトリに置いたファイルをそのまま静的サイトとして配信する仕組みである。
+本アプリでは \code{main} ブランチの最上位に \code{index.html} を置き，
+Pages の公開元を「ブランチから配信」（\code{main} の \code{/}）に設定している。
+
+\paragraph{準備}
+Git と GitHub CLI（\code{gh}）を使う。\code{gh auth login} で GitHub のアカウントにログインしておく。
+
+\paragraph{手順}
+\code{USER} を GitHub のアカウント名として，次の順に実行する。
 \begin{lstlisting}
 git init -b main
 git add index.html README.md
@@ -488,11 +495,32 @@ git commit -m "Initial commit"
 gh repo create USER/kklab-tax-burden --public --source=. --remote=origin --push
 gh api -X POST repos/USER/kklab-tax-burden/pages \
    -f "source[branch]=main" -f "source[path]=/"
+gh api repos/USER/kklab-tax-burden/pages/builds/latest -q .status
+gh repo edit USER/kklab-tax-burden \
+   --homepage "https://USER.github.io/kklab-tax-burden/"
 \end{lstlisting}
-ウェブ画面から設定する場合は，リポジトリの Settings → Pages で同じ公開元を選ぶ。
+\begin{enumerate}
+  \item 1〜3行目で，手元にリポジトリを作ってファイルをコミットする。
+  \item 4行目で，GitHub に公開リポジトリを作り，そこへ push する。
+  \item 5〜6行目で，Pages を有効にする。公開元として \code{main} ブランチの最上位を指定している。
+    ウェブ画面で行う場合は，リポジトリの Settings → Pages で同じ公開元を選ぶ。
+  \item 7行目で，サイトのビルドの状態を確かめる。\code{building} が \code{built} に変われば公開されている。
+  \item 8〜9行目は任意で，リポジトリのページに公開URLを表示させる設定である。
+\end{enumerate}
+
+\paragraph{公開URLと更新}
 公開URLは既定では \code{https://USER.github.io/kklab-tax-burden/} となる。
 著者のアカウントには独自ドメインを割り当てているため，
 本アプリのURLは \url{https://katzkawai.org/kklab-tax-burden/} である。
+以後は \code{main} へ push するたびに自動でビルドが走り，公開サイトに反映される。
+本アプリの最初の5回のビルドは，いずれも31〜42秒で終わった。
+配信されるファイルには10分間のキャッシュが指定されるので，閲覧者の側で更新が見えるまでに少し時間がかかることがある。
+
+\paragraph{配信される範囲}
+GitHub Pages は，リポジトリの最上位以下のファイルをすべて配信する。
+本アプリの場合，\code{README.md}，論文のソース \code{paper/paper.tex}，\code{wrangler.jsonc} も，URLを指定すれば取得できる
+（\code{.gitignore} のようにドットで始まるファイルは配信されない）。
+リポジトリ自体が公開なので支障はないが，公開したくないファイルはリポジトリに置かないことになる。
 
 \subsection{ほかの公開方法とローカルでの利用}
 
@@ -688,7 +716,7 @@ GitHub Actions で定期的に実行すれば，財務省の公表にあわせ�
 
 本稿では，日本の国民負担率インタラクティブダッシュボードについて，
 指標の読み方，データの出所，実装，公開方法，開発過程を説明した。
-アプリは単一のHTMLファイルで，公的機関の公表値をそのまま収録し，GitHub Pages で公開している。
+アプリは単一のHTMLファイルで，公的機関の公表値をそのまま収録し，GitHub Pages と Cloudflare Workers で公開している。
 開発では Gemini 3.8 Flash のプロトタイプを Claude Fable 5.1 が一次資料と照合して修正した。
 プロトタイプの数値の大半が公式値と合わなかったという事実は，
 生成AIで統計を扱うものを作るときには，一次資料との照合を工程として組み込む必要があることを示している。
@@ -782,11 +810,13 @@ URLは \url{https://kklab-tax-burden.katzkawai.workers.dev} である。
 Workers はもともとプログラムを実行する基盤だが，静的アセットの機能\cite{cfassets}を使うと，
 Worker のスクリプトを書かずにファイルだけを配信できる。
 本アプリにはサーバー側の処理がないので，この構成で足りる。
-リポジトリには設定ファイル \code{wrangler.jsonc} を置いてある。
+以下では，2026年10月4日に実際に行ったデプロイの手順を，設定，準備，実行，確認，更新の順に記す。
+操作は Claude Fable 5.1 が Wrangler を実行して行い，著者はブラウザでの認証の承認だけを行った。
 
 \subsection{構成}
 
-設定は次のとおりで，Worker の名前，互換性の基準日，配信するディレクトリだけを指定する。
+リポジトリの最上位に設定ファイル \code{wrangler.jsonc} を置く。
+内容は次のとおりで，Worker の名前，互換性の基準日，配信するディレクトリだけを指定する。
 \begin{lstlisting}
 {
   "name": "kklab-tax-burden",
@@ -796,32 +826,124 @@ Worker のスクリプトを書かずにファイルだけを配信できる。
   }
 }
 \end{lstlisting}
+\begin{description}
+  \item[\code{name}] Worker の名前。公開URLの先頭部分になる。
+  \item[\code{compatibility\_date}] Workers のランタイムの挙動を固定する基準日。
+    静的アセットだけの構成では挙動の差は生じないが，指定は必須である。
+  \item[\code{assets.directory}] 配信するファイルを置くディレクトリ。
+    Worker のスクリプトを示す \code{main} は書かない。
+\end{description}
+
 配信するディレクトリをリポジトリの最上位ではなく \code{dist} にしているのは，公開するファイルを明示的に選ぶためである。
 最上位を指定すると，\code{README.md} や論文のソースまで配信の対象になる。
 \code{dist} には \code{index.html} と論文のPDFだけをコピーする。
-\code{dist} は生成物なので，Git の管理対象からは外している。
+\code{dist} は生成物なので，\code{.gitignore} に加えて Git の管理対象から外している。
 
-\subsection{コマンドラインからの公開}
+\subsection{準備}
 
-Cloudflare のコマンドラインツール Wrangler を使う。Node.js が入っていれば，次の手順で公開できる。
+必要なものは Cloudflare のアカウントと Node.js である。
+Cloudflare のコマンドラインツール Wrangler は，\code{npx wrangler} として実行すれば，その場で取得されるのでインストールは要らない。
+本稿で用いた版は 4.147.0 である。
+
+最初に一度だけ，Wrangler を Cloudflare のアカウントに結びつける。
+
+\medskip
+\noindent
+\begin{minipage}{\linewidth}
+\begin{lstlisting}
+npx wrangler login
+npx wrangler whoami
+\end{lstlisting}
+\end{minipage}
+\medskip
+
+\code{wrangler login} を実行するとブラウザに Cloudflare の認証ページが開く。
+サインインして許可を与えると，Wrangler が手元で待ち受けているアドレスに結果が返り，ログインが完了する。
+認証情報は利用者のホームディレクトリ以下の Wrangler の設定ファイルに保存され，以後のコマンドで再利用される。
+\code{wrangler whoami} で，ログイン中のアカウントを確認できる。
+ブラウザを使えない自動実行の環境では，Cloudflare のダッシュボードで発行したAPIトークンを
+環境変数 \code{CLOUDFLARE\_API\_TOKEN} に設定して認証する。
+
+\subsection{デプロイの手順}
+
+リポジトリの最上位で，次の順に実行する。
 \begin{lstlisting}
 mkdir -p dist/paper
 cp index.html dist/
 cp paper/paper.pdf dist/paper/
-npx wrangler login
+npx wrangler deploy --dry-run
+npx wrangler dev
 npx wrangler deploy
 \end{lstlisting}
-\code{wrangler login} はブラウザで Cloudflare のアカウントを認証する操作で，初回だけ必要である。
-\code{wrangler deploy} が \code{dist} の内容をアップロードし，公開URLを表示する。
-URLは \code{https://kklab-tax-burden.SUBDOMAIN.workers.dev} の形で，
+\begin{enumerate}
+  \item 1〜3行目で，公開するファイルだけを \code{dist} にコピーする。
+  \item 4行目の \code{--dry-run} は，アップロードをせずに設定とファイルの読み込みだけを確かめる。
+  \item 5行目の \code{wrangler dev} は，手元で Workers のランタイムを起動する。
+    表示されたアドレス（既定では \code{http://localhost:8787}）をブラウザで開くと，公開時と同じ規則で配信される内容を確認できる。
+    確認が済んだら終了する。
+  \item 6行目の \code{wrangler deploy} が，\code{dist} の内容をアップロードして公開する。
+\end{enumerate}
+最初のデプロイで Wrangler が表示した内容は，おおよそ次のとおりである。
+\begin{lstlisting}
+Read 3 files from the assets directory .../kklab-tax-burden/dist
+Found 2 new or modified static assets to upload. Proceeding with upload...
++ /index.html
++ /paper/paper.pdf
+Success! Uploaded 2 files (1.94 sec)
+Uploaded kklab-tax-burden (4.27 sec)
+Deployed kklab-tax-burden triggers (0.75 sec)
+  https://kklab-tax-burden.katzkawai.workers.dev
+Current Version ID: 8ea38ed8-e8f4-48f6-8e1f-5a94824114f7
+\end{lstlisting}
+ファイルのアップロードから公開までは10秒足らずで終わる。
+公開URLは \code{https://kklab-tax-burden.SUBDOMAIN.workers.dev} の形で，
 \code{SUBDOMAIN} はアカウントごとに決まる名前である（著者のアカウントでは \code{katzkawai}）。
-内容を更新したときは，\code{dist} へのコピーと \code{wrangler deploy} をやり直す。
+同じ名前の Worker がなければ新しく作られ，あれば内容が置き換わる。
 
-公開の前に手元で確かめるには，\code{npx wrangler dev} を実行する。
-ローカルの Workers ランタイムが起動し，公開時と同じ規則でファイルが配信される。
+\subsection{公開後の確認}
+
+公開後に各URLへ要求を送り，応答を確かめた結果を表\ref{tab:cfcheck}に示す。
+公開するつもりのファイルだけが配信され，それ以外は存在しない扱いになっている。
+あわせてヘッドレスブラウザでページを開き，スクリプトのエラーがないこと，グラフとシミュレーターが動くことを確かめた。
+
+\begin{center}
+\begin{minipage}{\linewidth}
+  \centering
+  \captionof{table}{公開後の応答（Cloudflare Workers）}\label{tab:cfcheck}
+  \begin{tabular}{lll}
+    \toprule
+    パス & 応答 & 内容 \\
+    \midrule
+    \code{/} & 200 & アプリ本体（\code{text/html}） \\
+    \code{/index.html} & 307 & \code{/} へ転送 \\
+    \code{/paper/paper.pdf} & 200 & 論文（\code{application/pdf}） \\
+    \code{/README.md} & 404 & 配信しない \\
+    \code{/wrangler.jsonc} & 404 & 配信しない \\
+    \code{/paper/paper.tex} & 404 & 配信しない \\
+    \bottomrule
+  \end{tabular}
+\end{minipage}
+\end{center}
+
+\subsection{更新，履歴，取り消し}
+
+内容を更新したときは，\code{dist} へのコピーと \code{wrangler deploy} をやり直す。
+Wrangler は変更のあったファイルだけをアップロードする。
+本稿のPDFを差し替えた2回目のデプロイでは，アップロードされたのは1ファイルで，残りは「アップロード済み」と表示された。
+
+デプロイのたびに，Worker の新しいバージョンが作られる。次のコマンドで履歴の確認と取り消しができる。
+\begin{lstlisting}
+npx wrangler deployments list
+npx wrangler rollback VERSION_ID
+npx wrangler delete
+\end{lstlisting}
+\code{deployments list} は，デプロイの日時とバージョンのIDを一覧する。
+\code{rollback} は，指定したバージョンの内容に戻す。
+\code{delete} は Worker そのものを削除し，公開をやめる。
 
 \subsection{Git 連携による自動公開}
 
+上の方法では，更新のたびに手元でコマンドを実行する必要がある。
 Workers Builds\cite{cfbuilds}を使うと，GitHub のリポジトリへの push をきっかけに自動で公開できる。
 Cloudflare のダッシュボードで Workers \& Pages から対象の Worker を選び，
 Settings の Builds でリポジトリを接続して，次のように設定する。
@@ -831,6 +953,7 @@ Settings の Builds でリポジトリを接続して，次のように設定す
 \end{itemize}
 ダッシュボード上の Worker の名前は，\code{wrangler.jsonc} の \code{name} と一致していなければならない。
 この設定をすれば，GitHub Pages と同じく \code{main} への push だけで公開サイトが更新される。
+本稿の時点では，この連携は設定していない。
 
 \subsection{独自ドメイン}
 
@@ -843,20 +966,55 @@ Cloudflare で管理しているドメインがあれば，そのサブドメイ
 \end{lstlisting}
 \code{workers.dev} のURLは個人や趣味の用途向けとされているので，
 継続して運用する場合は独自ドメインを割り当てるのが望ましい。
+本稿の時点では，独自ドメインは割り当てていない。
 
-\subsection{GitHub Pages との違いと注意}
+\subsection{つまずきやすい点}
 
+準備の過程で実際に起きた問題を三つ挙げる。
 \begin{itemize}
-  \item 二つの公開先は併用できる。同じ内容が二つのURLで公開されることになるので，
-    \code{index.html} の \code{canonical} と \code{og:url} には正とするURLを書いておく。
-    現在は GitHub Pages のURLを指定している。
-  \item GitHub Pages はリポジトリの全ファイルを配信するが，上の構成の Workers は \code{dist} に置いたファイルだけを配信する。
-  \item Tailwind CSS，Chart.js，フォントをCDNから読み込む点は，どちらの公開先でも変わらない。
+  \item \textbf{ログインしていない}：ログインしていない状態では \code{wrangler deploy} は実行できない。
+    \code{wrangler whoami} で状態を確かめ，\code{wrangler login} を済ませてから実行する。
+    \code{--dry-run} と \code{wrangler dev} はログインなしで動くので，設定の確認は先に進められる。
+  \item \textbf{配信するディレクトリを最上位にした}：リポジトリの最上位を \code{assets.directory} にし，
+    除外リスト（\code{.assetsignore}）で不要なファイルを外す構成も試した。
+    この構成では Wrangler がディレクトリ内の25個のファイルを読み込み，
+    手元のランタイムは再読み込みを繰り返して応答しなかった。
+    作業中に書き換わるファイルが配信するディレクトリの中にあったためと考えられる。
+    除外リストの書き漏らしがそのまま公開につながる点でも危うい。
+    公開するファイルは専用のディレクトリに分けるのがよい。
+  \item \textbf{基準日がランタイムより新しい}：古い Wrangler（4.119.0）では，
+    \code{compatibility\_date} が手元のランタイムの対応する日付より新しいと，\code{wrangler dev} が起動に失敗した。
+    \code{npx wrangler@latest} として新しい版を使うか，基準日を古い日付にすれば解消する。
 \end{itemize}
 
-上の構成は Wrangler 4.147.0 で確認し，2026年10月4日にコマンドラインから著者のアカウントへデプロイした。
-\code{/} と \code{/paper/paper.pdf} が配信され，\code{/README.md} や \code{/wrangler.jsonc} が404になることを，
-ローカルのランタイムと公開後のURLの両方で確かめた。
-Git 連携と独自ドメインは設定していない。
+\subsection{GitHub Pages との比較}
+
+二つの公開先の違いを表\ref{tab:hosting}にまとめる。
+二つは併用でき，本アプリは両方で公開している。
+同じ内容が二つのURLで公開されることになるので，
+\code{index.html} の \code{canonical} と \code{og:url} には正とするURLを書いておく。
+現在は GitHub Pages のURLを指定している。
+Tailwind CSS，Chart.js，フォントをCDNから読み込む点は，どちらの公開先でも変わらない。
+
+\begin{center}
+\begin{minipage}{\linewidth}
+  \centering
+  \captionof{table}{GitHub Pages と Cloudflare Workers の比較（本アプリの場合）}\label{tab:hosting}
+  {\small
+  \begin{tabular}{p{0.20\linewidth}p{0.35\linewidth}p{0.35\linewidth}}
+    \toprule
+    項目 & GitHub Pages & Cloudflare Workers \\
+    \midrule
+    配信される範囲 & リポジトリの全ファイル & \code{dist} に置いたファイルだけ \\
+    設定ファイル & 不要（公開元の指定のみ） & \code{wrangler.jsonc} \\
+    更新の方法 & \code{main} への push で自動 & \code{wrangler deploy} の実行（Git 連携を設定すれば自動） \\
+    反映までの時間 & ビルドに31〜42秒 & アップロードと公開で10秒足らず \\
+    キャッシュの指定 & 10分 & 毎回再検証 \\
+    既定のURL & \code{USER.github.io/リポジトリ名/} & \code{名前.SUBDOMAIN.workers.dev} \\
+    取り消し & コミットを戻して push & \code{wrangler rollback} \\
+    \bottomrule
+  \end{tabular}}
+\end{minipage}
+\end{center}
 
 \end{document}
