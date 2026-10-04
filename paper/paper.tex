@@ -498,6 +498,7 @@ gh api -X POST repos/USER/kklab-tax-burden/pages \
 
 サーバー側の処理がないので，静的ファイルを配信できる環境であればどこにでも置ける。
 \code{index.html} をウェブサーバーの公開ディレクトリにコピーすれば足りる。
+Cloudflare Workers で公開する手順は付録\ref{app:cloudflare}に示す。
 ローカルでは，ファイルをブラウザで直接開けば動作する。
 インターネットに接続していない場合，スタイルとグラフは読み込めないが，
 数値のカード，表，シミュレーターの計算は動く。
@@ -717,6 +718,12 @@ GitHub Actions で定期的に実行すれば，財務省の公表にあわせ�
     \url{https://tailwindcss.com/docs/installation/play-cdn}
   \bibitem{ghpages} GitHub「GitHub Pages のドキュメント」．
     \url{https://docs.github.com/ja/pages}
+  \bibitem{cfassets} Cloudflare, ``Static Assets''．
+    \url{https://developers.cloudflare.com/workers/static-assets/}
+  \bibitem{cfbuilds} Cloudflare, ``Workers Builds''．
+    \url{https://developers.cloudflare.com/workers/ci-cd/builds/}
+  \bibitem{cfdomains} Cloudflare, ``Custom Domains''．
+    \url{https://developers.cloudflare.com/workers/configuration/routing/custom-domains/}
 \end{thebibliography}
 
 \clearpage
@@ -747,11 +754,12 @@ GitHub Actions で定期的に実行すれば，財務省の公表にあわせ�
 \noindent{\footnotesize
 単位は，国民所得とGDPが兆円，その他は\%。$\dagger$は実績見込み，$\ddagger$は見通し。出所：財務省\cite{mof2026}。}
 
+\clearpage
 \section{国際比較データ}\label{app:intl}
 
-\begin{table}[htbp]
-  \centering
-  \caption{国民負担率の国際比較（OECD加盟35カ国，2023年，\%）}\label{tab:intl}
+% 付録の表は見出しの直後に置く（フロートにしない）
+\begin{center}
+  \captionof{table}{国民負担率の国際比較（OECD加盟35カ国，2023年，\%）}\label{tab:intl}
   {\footnotesize
   \begin{tabular}{rlrrrrr}
     \toprule
@@ -763,6 +771,91 @@ GitHub Actions で定期的に実行すれば，財務省の公表にあわせ�
 
   \smallskip
   {\footnotesize 順位は対国民所得比の高い順。$*$ ノルウェーは2022年，トルコは2020年。日本は2023年度。出所：財務省\cite{mof2026}。}
-\end{table}
+\end{center}
+
+\clearpage
+
+\section{Cloudflare Workers での公開}\label{app:cloudflare}
+
+本アプリは GitHub Pages のほか，Cloudflare Workers でも公開できる。
+Workers はもともとプログラムを実行する基盤だが，静的アセットの機能\cite{cfassets}を使うと，
+Worker のスクリプトを書かずにファイルだけを配信できる。
+本アプリにはサーバー側の処理がないので，この構成で足りる。
+リポジトリには設定ファイル \code{wrangler.jsonc} を置いてある。
+
+\subsection{構成}
+
+設定は次のとおりで，Worker の名前，互換性の基準日，配信するディレクトリだけを指定する。
+\begin{lstlisting}
+{
+  "name": "kklab-tax-burden",
+  "compatibility_date": "2026-09-15",
+  "assets": {
+    "directory": "./dist"
+  }
+}
+\end{lstlisting}
+配信するディレクトリをリポジトリの最上位ではなく \code{dist} にしているのは，公開するファイルを明示的に選ぶためである。
+最上位を指定すると，\code{README.md} や論文のソースまで配信の対象になる。
+\code{dist} には \code{index.html} と論文のPDFだけをコピーする。
+\code{dist} は生成物なので，Git の管理対象からは外している。
+
+\subsection{コマンドラインからの公開}
+
+Cloudflare のコマンドラインツール Wrangler を使う。Node.js が入っていれば，次の手順で公開できる。
+\begin{lstlisting}
+mkdir -p dist/paper
+cp index.html dist/
+cp paper/paper.pdf dist/paper/
+npx wrangler login
+npx wrangler deploy
+\end{lstlisting}
+\code{wrangler login} はブラウザで Cloudflare のアカウントを認証する操作で，初回だけ必要である。
+\code{wrangler deploy} が \code{dist} の内容をアップロードし，公開URLを表示する。
+URLは \code{https://kklab-tax-burden.SUBDOMAIN.workers.dev} の形で，
+\code{SUBDOMAIN} はアカウントごとに決まる名前である。
+内容を更新したときは，\code{dist} へのコピーと \code{wrangler deploy} をやり直す。
+
+公開の前に手元で確かめるには，\code{npx wrangler dev} を実行する。
+ローカルの Workers ランタイムが起動し，公開時と同じ規則でファイルが配信される。
+
+\subsection{Git 連携による自動公開}
+
+Workers Builds\cite{cfbuilds}を使うと，GitHub のリポジトリへの push をきっかけに自動で公開できる。
+Cloudflare のダッシュボードで Workers \& Pages から対象の Worker を選び，
+Settings の Builds でリポジトリを接続して，次のように設定する。
+\begin{itemize}
+  \item ビルドコマンド：\code{mkdir -p dist/paper \&\& cp index.html dist/ \&\& cp paper/paper.pdf dist/paper/}
+  \item デプロイコマンド：\code{npx wrangler deploy}（既定値）
+\end{itemize}
+ダッシュボード上の Worker の名前は，\code{wrangler.jsonc} の \code{name} と一致していなければならない。
+この設定をすれば，GitHub Pages と同じく \code{main} への push だけで公開サイトが更新される。
+
+\subsection{独自ドメイン}
+
+Cloudflare で管理しているドメインがあれば，そのサブドメインを Worker に割り当てられる\cite{cfdomains}。
+\code{wrangler.jsonc} に次の項目を加えて公開し直すと，DNSレコードと証明書は Cloudflare が用意する。
+\begin{lstlisting}
+"routes": [
+  { "pattern": "tax.example.com", "custom_domain": true }
+]
+\end{lstlisting}
+\code{workers.dev} のURLは個人や趣味の用途向けとされているので，
+継続して運用する場合は独自ドメインを割り当てるのが望ましい。
+
+\subsection{GitHub Pages との違いと注意}
+
+\begin{itemize}
+  \item 二つの公開先は併用できる。同じ内容が二つのURLで公開されることになるので，
+    \code{index.html} の \code{canonical} と \code{og:url} には正とするURLを書いておく。
+    現在は GitHub Pages のURLを指定している。
+  \item GitHub Pages はリポジトリの全ファイルを配信するが，上の構成の Workers は \code{dist} に置いたファイルだけを配信する。
+  \item Tailwind CSS，Chart.js，フォントをCDNから読み込む点は，どちらの公開先でも変わらない。
+\end{itemize}
+
+本稿の時点では，公開先は GitHub Pages である。
+上の構成は Wrangler 4.147.0 のローカルのランタイムで確認したもので，
+\code{/} と \code{/paper/paper.pdf} が配信され，\code{/README.md} や \code{/wrangler.jsonc} が404になることを確かめた。
+Cloudflare のアカウントへの実際のデプロイは行っていない。
 
 \end{document}

@@ -1,0 +1,10 @@
+{
+  "name": "kklab-tax-burden",
+  "compatibility_date": "2026-09-15",
+  // Worker スクリプトを持たない、静的アセットだけの構成。
+  // dist/ には公開するファイル (index.html と paper/paper.pdf) だけをコピーしておく。
+  // README や論文のソースなど、リポジトリのほかのファイルは配信されない。
+  "assets": {
+    "directory": "./dist"
+  }
+}

@@ -6,3 +6,8 @@
 *.fls
 *.fdb_latexmk
 *.synctex.gz
+
+# Cloudflare Workers
+dist/
+.wrangler/
+node_modules/

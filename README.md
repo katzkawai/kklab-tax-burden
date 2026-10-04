@@ -47,6 +47,7 @@ paper/paper.tex     解説論文（LuaLaTeX + jlreq）
 paper/paper.pdf     解説論文のPDF
 paper/figures/      論文に載せたアプリ画面の図
 paper/tables/       論文の表の本体（公表資料とアプリのデータから生成）
+wrangler.jsonc      Cloudflare Workers 用の設定（静的アセットのみ）
 ```
 
 論文は `paper/` で `latexmk -lualatex paper.tex` を実行するとビルドできます。
@@ -56,6 +57,20 @@ paper/tables/       論文の表の本体（公表資料とアプリのデータ
 ## ローカルでの確認
 
 `index.html` をブラウザで直接開くだけで動作します。
+
+## Cloudflare Workers での公開
+
+GitHub Pages のほか、Cloudflare Workers（静的アセット）でも公開できます。`dist/` に公開するファイルだけをコピーしてデプロイします。
+
+```bash
+mkdir -p dist/paper
+cp index.html dist/
+cp paper/paper.pdf dist/paper/
+npx wrangler login      # 初回のみ
+npx wrangler deploy     # https://kklab-tax-burden.<サブドメイン>.workers.dev で公開される
+```
+
+手元での確認は `npx wrangler dev`。Git 連携（Workers Builds）や独自ドメインの設定は、解説論文の付録Cを参照してください。
 
 ## データの更新
 
