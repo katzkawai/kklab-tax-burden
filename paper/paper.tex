@@ -777,7 +777,8 @@ GitHub Actions で定期的に実行すれば，財務省の公表にあわせ�
 
 \section{Cloudflare Workers での公開}\label{app:cloudflare}
 
-本アプリは GitHub Pages のほか，Cloudflare Workers でも公開できる。
+本アプリは GitHub Pages のほか，Cloudflare Workers でも公開している。
+URLは \url{https://kklab-tax-burden.katzkawai.workers.dev} である。
 Workers はもともとプログラムを実行する基盤だが，静的アセットの機能\cite{cfassets}を使うと，
 Worker のスクリプトを書かずにファイルだけを配信できる。
 本アプリにはサーバー側の処理がないので，この構成で足りる。
@@ -813,7 +814,7 @@ npx wrangler deploy
 \code{wrangler login} はブラウザで Cloudflare のアカウントを認証する操作で，初回だけ必要である。
 \code{wrangler deploy} が \code{dist} の内容をアップロードし，公開URLを表示する。
 URLは \code{https://kklab-tax-burden.SUBDOMAIN.workers.dev} の形で，
-\code{SUBDOMAIN} はアカウントごとに決まる名前である。
+\code{SUBDOMAIN} はアカウントごとに決まる名前である（著者のアカウントでは \code{katzkawai}）。
 内容を更新したときは，\code{dist} へのコピーと \code{wrangler deploy} をやり直す。
 
 公開の前に手元で確かめるには，\code{npx wrangler dev} を実行する。
@@ -853,9 +854,9 @@ Cloudflare で管理しているドメインがあれば，そのサブドメイ
   \item Tailwind CSS，Chart.js，フォントをCDNから読み込む点は，どちらの公開先でも変わらない。
 \end{itemize}
 
-本稿の時点では，公開先は GitHub Pages である。
-上の構成は Wrangler 4.147.0 のローカルのランタイムで確認したもので，
-\code{/} と \code{/paper/paper.pdf} が配信され，\code{/README.md} や \code{/wrangler.jsonc} が404になることを確かめた。
-Cloudflare のアカウントへの実際のデプロイは行っていない。
+上の構成は Wrangler 4.147.0 で確認し，2026年10月4日にコマンドラインから著者のアカウントへデプロイした。
+\code{/} と \code{/paper/paper.pdf} が配信され，\code{/README.md} や \code{/wrangler.jsonc} が404になることを，
+ローカルのランタイムと公開後のURLの両方で確かめた。
+Git 連携と独自ドメインは設定していない。
 
 \end{document}

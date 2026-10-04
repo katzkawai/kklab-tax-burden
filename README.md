@@ -4,7 +4,7 @@
 
 > 本サイトは **Gemini 3.8 Flash** でプロトタイプを作成し、**Claude Fable 5.1** で内容の精査・修正・拡充を行いました。
 
-公開URL: https://katzkawai.org/kklab-tax-burden/
+公開URL: https://katzkawai.org/kklab-tax-burden/ （GitHub Pages）／ https://kklab-tax-burden.katzkawai.workers.dev （Cloudflare Workers）
 
 解説論文: [paper/paper.pdf](paper/paper.pdf)（指標の読み方、データの出所、仕組み、公開方法、開発過程、拡張の構想）
 
@@ -67,7 +67,7 @@ mkdir -p dist/paper
 cp index.html dist/
 cp paper/paper.pdf dist/paper/
 npx wrangler login      # 初回のみ
-npx wrangler deploy     # https://kklab-tax-burden.<サブドメイン>.workers.dev で公開される
+npx wrangler deploy     # https://kklab-tax-burden.katzkawai.workers.dev に公開される
 ```
 
 手元での確認は `npx wrangler dev`。Git 連携（Workers Builds）や独自ドメインの設定は、解説論文の付録Cを参照してください。
