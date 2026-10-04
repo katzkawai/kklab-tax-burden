@@ -86,6 +86,10 @@ OECD加盟35カ国との国際比較を図表で示し，あわせて給与所�
 \url{https://kklab-tax-burden.katzkawai.workers.dev}（Cloudflare Workers）\\
 \textbf{ソースコード}：\url{https://github.com/katzkawai/kklab-tax-burden}
 
+\setcounter{tocdepth}{2}
+\tableofcontents
+\clearpage
+
 \section{はじめに}
 
 国民負担率は，税と社会保険料の負担が国民所得に対してどれだけの大きさかを示す指標で，
@@ -100,13 +104,22 @@ OECD加盟35カ国との国際比較を図表で示し，あわせて給与所�
 あわせて個人の負担を別に計算して見せることで，マクロ指標と個人の負担の違いを具体的に示すことにある。
 授業や一般向けの説明で，その場で数値を確かめながら使うことを想定している。
 
+本稿が記録するのは次の三点である。
+\begin{enumerate}
+  \item 国民負担率の定義，分母の違い，個人の負担との関係の整理（第\ref{sec:indicator}節）。
+  \item 公表値だけを用いた可視化アプリの構成と，それを誰でも再現できる公開の手順
+    （第\ref{sec:app}〜\ref{sec:hosting}節，付録\ref{app:cloudflare}）。
+  \item 生成AIが作ったプロトタイプを別の生成AIが一次資料と照合して直した過程と，そこで見つかった誤りの内容
+    （第\ref{sec:ai}・\ref{sec:verify}節）。
+\end{enumerate}
+
 本稿の構成は次のとおりである。
 第\ref{sec:indicator}節で指標の定義と読み方を整理し，第\ref{sec:app}節でアプリの機能を，
-第\ref{sec:data}節でデータの出所を説明する。
-第\ref{sec:impl}節で実装とシミュレーターの計算モデルを，第\ref{sec:hosting}節で公開の方法を述べる
-（Cloudflare Workers での公開の詳細は付録\ref{app:cloudflare}）。
+第\ref{sec:data}節でデータとその出所を説明する。
+第\ref{sec:impl}節で実装とシミュレーターの計算モデルを，第\ref{sec:hosting}節で公開と運用の方法を述べる。
 第\ref{sec:ai}節は Gemini 3.8 Flash と Claude Fable 5.1 による開発過程，第\ref{sec:verify}節は検証である。
 第\ref{sec:limits}節で限界を，第\ref{sec:extension}節で拡張の構想を述べる。
+付録には，年度別データ，国際比較データ，Cloudflare Workers へのデプロイの詳細を収めた。
 
 \section{国民負担率という指標}\label{sec:indicator}
 
@@ -130,11 +143,14 @@ OECD加盟35カ国との国際比較を図表で示し，あわせて給与所�
   \mathit{NI} = \mathit{GDP} + \text{海外からの所得の純受取} - \text{固定資本減耗}
      - (\text{生産・輸入品に課される税} - \text{補助金})
 \end{equation}
-である。固定資本減耗と間接税（純）を除くため，国民所得はGDPより小さい。
+である\footnote{支出側のGDPから求める場合は，このほかに統計上の不突合を差し引く。}。
+固定資本減耗と間接税（純）を除くため，国民所得はGDPより小さい。
 令和8年度見通しでは $\mathit{NI}/\mathit{GDP}=496.1/691.9\approx 0.717$ である。
 対国民所得比の値を $b^{\mathit{NI}}$ とすると，対GDP比は
 $b^{\mathit{GDP}} = b^{\mathit{NI}}\times \mathit{NI}/\mathit{GDP}$ で求まり，
 45.7\%は32.7\%に対応する。
+この比は一定ではない。財務省の表から計算すると，1970年度は0.81，1990年度は0.77，2010年度は0.71で，
+対国民所得比と対GDP比の開きは長期的に広がってきた。
 分子には消費税などの間接税が入るのに分母からは除かれるので，
 間接税の比重が大きい国ほど対国民所得比は高く出やすい。
 国際比較では両方の比率を見る必要がある。
@@ -221,7 +237,7 @@ $b^{\mathit{GDP}} = b^{\mathit{NI}}\times \mathit{NI}/\mathit{GDP}$ で求まり
   \caption{給与所得者の負担概算シミュレーター（年収600\man，単身，40歳未満の例）}\label{fig:sim}
 \end{figure}
 
-\section{データの出所}\label{sec:data}
+\section{データとその出所}\label{sec:data}
 
 \subsection{出所の一覧}
 
@@ -235,16 +251,20 @@ $b^{\mathit{GDP}} = b^{\mathit{NI}}\times \mathit{NI}/\mathit{GDP}$ で求まり
     \toprule
     内容 & 出所 \\
     \midrule
-    国民負担率の推移（1970〜2026年度，11系列） &
+    国民負担率の推移（1970〜2026年度，10系列） &
       財務省「令和8年度の国民負担率を公表します」（2026年3月5日）の資料「国民負担率（対国民所得比）の推移」\cite{mof2026} \\
     国際比較（35カ国，主要6カ国） &
       同上の資料「国民負担率の国際比較」「国民負担率の国際比較（OECD加盟35カ国）」\cite{mof2026} \\
     租税負担率の税目別内訳 &
       財務省「負担率に関する資料」の「国民負担率及び租税負担率の推移（対国民所得比）」\cite{mofa04} \\
-    所得税・住民税の控除額 &
-      財務省「令和8年度税制改正の大綱」\cite{taikou2026} \\
+    所得税の控除額と税率 &
+      国税庁「タックスアンサー」\cite{nta}，財務省「令和8年度税制改正の大綱」\cite{taikou2026} \\
+    住民税の税率・均等割・調整控除 &
+      総務省「個人住民税」\cite{soumu}，大綱\cite{taikou2026}，大阪市の解説\cite{osaka} \\
     健康保険・介護保険・子ども・子育て支援金の料率 &
       全国健康保険協会「令和8年度保険料率」\cite{kenpo2026} \\
+    厚生年金の料率と標準報酬月額の上限 &
+      日本年金機構「厚生年金保険の保険料」\cite{nenkin} \\
     雇用保険料率 &
       厚生労働省「令和8（2026）年度 雇用保険料率のご案内」\cite{mhlw2026} \\
     \bottomrule
@@ -254,7 +274,8 @@ $b^{\mathit{GDP}} = b^{\mathit{NI}}\times \mathit{NI}/\mathit{GDP}$ で求まり
 \subsection{推移データ}
 
 推移データは，年度ごとに国税，地方税，租税負担率，社会保障負担率，国民負担率，財政赤字，
-潜在的国民負担率，国民負担率の対GDP比，国民所得，GDPの値を持つ。
+潜在的国民負担率，国民負担率の対GDP比，国民所得，GDPの10個の値を持つ。
+財務省の表にはこのほか国税のうち一般会計税収の列があるが，アプリには収録していない。
 全年度の値を付録\ref{app:trend}に掲げる。主な年度を抜き出すと表\ref{tab:selected}のとおりである。
 
 \begin{table}[htbp]
@@ -280,11 +301,22 @@ $b^{\mathit{GDP}} = b^{\mathit{NI}}\times \mathit{NI}/\mathit{GDP}$ で求まり
   {\footnotesize 出所：財務省\cite{mof2026}。対GDP比を除き対国民所得比。}
 \end{table}
 
-1980年度から2026年度見通しまでに国民負担率は30.5\%から45.7\%へ約15ポイント上昇した。
-このうち社会保障負担率が8.8\%から17.6\%へ8.8ポイント，租税負担率が21.7\%から28.0\%へ6.3ポイント上がっており，
-上昇の過半は社会保障負担による。
-潜在的国民負担率は，新型コロナウイルス感染症への対策で財政赤字が膨らんだ2020年度に62.6\%と，
-1970年度以降で最も高くなった。
+この系列から読み取れる特徴を四つ挙げる。
+\begin{itemize}
+  \item \textbf{長期の上昇}：1980年度から2026年度見通しまでに国民負担率は30.5\%から45.7\%へ約15ポイント上昇した。
+    このうち社会保障負担率が8.8\%から17.6\%へ8.8ポイント，租税負担率が21.7\%から28.0\%へ6.3ポイント上がっており，
+    上昇の過半は社会保障負担による。国民負担率が初めて40\%に達したのは2013年度，45\%を超えたのは2020年度である。
+  \item \textbf{租税負担率の波}：租税負担率は1989・1990年度の27.7\%を頂点に低下し，2003年度には20.5\%まで下がった。
+    その後は上昇に転じ，2022年度に系列中で最も高い28.7\%となった。
+    社会保障負担率がほぼ一貫して上がってきたのに対し，租税負担率は景気と税制改正に応じて上下している。
+  \item \textbf{直近の低下}：国民負担率は2020年度と2022年度の47.3\%が最も高く，2026年度見通しの45.7\%はそれより1.6ポイント低い。
+    社会保障負担率も2020年度の19.4\%から17.6\%へ下がっている。
+    比率の低下は，分母の国民所得の伸びが分子の負担額の伸びを上回ったことを意味し，負担額そのものが減ったことを意味しない。
+    比率に国民所得を掛けて概算すると，負担額は2022年度の約198兆円から2026年度見通しの約227兆円へ増えている。
+  \item \textbf{財政赤字の振れ}：財政赤字の対国民所得比は，1990年度の0.1\%から2020年度の15.3\%まで大きく動く。
+    潜在的国民負担率は，新型コロナウイルス感染症への対策で赤字が膨らんだ2020年度に62.6\%と，
+    1970年度以降で最も高くなった。
+\end{itemize}
 
 データを利用するうえで留意する点が四つある。
 \begin{enumerate}
@@ -312,6 +344,34 @@ OECD加盟38カ国のうち，オーストラリア，コロンビア，アイ�
 アイルランドは対国民所得比で50.0\%の18位，対GDP比では22.1\%の33位である。
 いずれも国外へ流出する所得が大きく，GDPと国民所得の差が大きい国である。
 
+主要国については，財政赤字を加えた潜在的国民負担率も公表されている（表\ref{tab:major}）。
+米国は国民負担率こそ34.2\%と低いが，財政赤字が10.7\%あり，潜在的国民負担率は44.9\%になる。
+日本（2023年度）は45.7\%に4.1\%が加わって49.8\%で，両国の差は11.5ポイントから4.9ポイントに縮まる。
+フランスは73.3\%と，6カ国の中で最も高い。
+ただし財政収支の範囲は国によって異なるので，厳密な比較には向かない。
+
+\begin{table}[htbp]
+  \centering
+  \caption{主要国の国民負担率と潜在的国民負担率（対国民所得比，\%）}\label{tab:major}
+  \begin{tabular}{llrrrrr}
+    \toprule
+    国 & 対象年 & 租税 & 社会保障 & 国民負担率 & 財政赤字 & 潜在的 \\
+    \midrule
+    日本 & 2026年度（見通し） & 28.0 & 17.6 & 45.7 (32.7) & 2.7 & 48.4 (34.7) \\
+    日本 & 2023年度（実績） & 27.6 & 18.1 & 45.7 (32.6) & 4.1 & 49.8 (35.5) \\
+    米国 & 2023年 & 25.6 & 8.6 & 34.2 (26.1) & 10.7 & 44.9 (34.3) \\
+    英国 & 2023年 & 38.3 & 11.5 & 49.8 (36.2) & 8.6 & 58.4 (42.5) \\
+    ドイツ & 2023年 & 30.8 & 22.6 & 53.4 (39.8) & 3.7 & 57.0 (42.6) \\
+    スウェーデン & 2023年 & 49.9 & 5.3 & 55.2 (36.3) & 2.5 & 57.7 (37.9) \\
+    フランス & 2023年 & 41.6 & 23.1 & 64.8 (45.7) & 8.5 & 73.3 (51.7) \\
+    \bottomrule
+  \end{tabular}
+
+  \smallskip
+  {\footnotesize 括弧内は対GDP比。財政収支は一般政府ベースだが，日本は社会保障基金を，米国は社会保障年金信託基金を含まない。
+  出所：財務省\cite{mof2026}。}
+\end{table}
+
 \section{仕組み}\label{sec:impl}
 
 \subsection{全体の構成}
@@ -323,25 +383,29 @@ HTML，スタイル，データ，描画と計算のスクリプトをすべて�
 ブラウザでファイルを直接開くだけで動作する。
 外部から読み込むのは，スタイルの Tailwind CSS\cite{tailwind}，グラフ描画の Chart.js 4.5.1\cite{chartjs}，
 ウェブフォント（Inter，Noto Sans JP）の三つで，いずれもCDNから取得する。
+配信の経路は GitHub Pages と Cloudflare Workers の二つで，どちらも同じ \code{index.html} を静的に配る。
 全体の流れを図\ref{fig:arch}に示す。
 
 \begin{figure}[tbp]
   \centering
   \begin{tikzpicture}[
       font=\small,
-      node distance=10mm and 19mm,
+      node distance=9mm and 17mm,
       box/.style={draw, rounded corners=2pt, align=center, inner sep=5pt, minimum height=11mm},
       arr/.style={-{Stealth[length=2.2mm]}, semithick}]
     \node[box] (src) {公表資料\\{\footnotesize 財務省・協会けんぽ・厚労省}};
     \node[box, right=of src] (html) {\code{index.html}\\{\footnotesize データ配列＋スクリプト}};
     \node[box, right=of html] (gh) {GitHub リポジトリ\\{\footnotesize \code{main} ブランチ}};
+    \node[box, below=of html] (cf) {Cloudflare Workers\\{\footnotesize 静的配信}};
     \node[box, below=of gh] (pages) {GitHub Pages\\{\footnotesize 静的配信}};
-    \node[box, below=of html] (browser) {閲覧者のブラウザ\\{\footnotesize 描画と計算を実行}};
-    \node[box, below=of src] (cdn) {CDN\\{\footnotesize Tailwind CSS・Chart.js}};
+    \node[box, below=of cf] (browser) {閲覧者のブラウザ\\{\footnotesize 描画と計算を実行}};
+    \node[box, left=of browser] (cdn) {CDN\\{\footnotesize Tailwind CSS・Chart.js}};
     \draw[arr] (src) -- node[above]{\footnotesize 転記・検証} (html);
     \draw[arr] (html) -- node[above]{\footnotesize push} (gh);
-    \draw[arr] (gh) -- node[right]{\footnotesize 自動デプロイ} (pages);
-    \draw[arr] (pages) -- node[above]{\footnotesize HTML} (browser);
+    \draw[arr] (html) -- node[left]{\footnotesize \code{wrangler deploy}} (cf);
+    \draw[arr] (gh) -- node[right]{\footnotesize 自動ビルド} (pages);
+    \draw[arr] (cf) -- node[left]{\footnotesize HTML} (browser);
+    \draw[arr] (pages) |- node[pos=0.75, above]{\footnotesize HTML} (browser);
     \draw[arr] (cdn) -- node[above]{\footnotesize ライブラリ} (browser);
   \end{tikzpicture}
   \caption{データと配信の流れ}\label{fig:arch}
@@ -387,10 +451,15 @@ CDNからChart.jsを取得できない場合は，グラフの代わりに年度
 
 シミュレーターは，令和8（2026）年の給与収入 $W$（年額）に対する社会保険料，所得税，住民税を概算する。
 所得税は令和8年分，住民税はその所得に対して翌年度（令和9年度）に課税される額である。
+所得税の控除額と税率は国税庁の解説（令和8年4月1日現在の法令）\cite{nta}で，
+住民税の税率と均等割は総務省の解説\cite{soumu}で確かめた。
+住民税の給与所得控除の特例は大綱\cite{taikou2026}に，調整控除の計算は自治体の解説\cite{osaka}によっている。
 以下，金額の単位は円とする。
 
 \paragraph{社会保険料}
-賞与はなく，月給は $W/12$ とみなす。標準報酬月額の上限は健康保険139\man，厚生年金65\man である。
+賞与はなく，月給は $W/12$ とみなす。標準報酬月額の上限は，健康保険が139\man（保険料額表の第50級），
+厚生年金が65\man（第32級）\cite{nenkin}である。
+等級の区切りによる端数は無視し，月給をそのまま標準報酬月額とする。
 \begin{equation}
   S = 12\Bigl[\min\bigl(\tfrac{W}{12},\,1{,}390{,}000\bigr)\,(h + c + k\,\mathbf{1}_{40\text{〜}64歳})
       + \min\bigl(\tfrac{W}{12},\,650{,}000\bigr)\,p\Bigr] + eW .
@@ -414,11 +483,11 @@ CDNからChart.jsを取得できない場合は，グラフの代わりに年度
   \end{tabular}
 
   \smallskip
-  {\footnotesize 出所：全国健康保険協会\cite{kenpo2026}，厚生労働省\cite{mhlw2026}。厚生年金の料率は法定の18.3\%。}
+  {\footnotesize 出所：全国健康保険協会\cite{kenpo2026}，厚生労働省\cite{mhlw2026}，日本年金機構\cite{nenkin}。}
 \end{table}
 
 \paragraph{給与所得}
-給与所得控除 $D(W)$ は，令和8年分の最低保障額69\man に令和8・9年の特例5\man を加えた74\man を下限とする\cite{taikou2026}。
+給与所得控除 $D(W)$ は，令和8年分の最低保障額69\man に令和8・9年の特例5\man を加えた74\man を下限とする\cite{nta,taikou2026}。
 \begin{equation}
   D(W)=
   \begin{cases}
@@ -434,7 +503,8 @@ CDNからChart.jsを取得できない場合は，グラフの代わりに年度
 \paragraph{所得税}
 基礎控除 $B(Y)$ は，本則62\man に令和8・9年分の特例加算を加えた額で，
 $Y\le 489\text{万}$ なら104\man，$489\text{万}<Y\le 655\text{万}$ なら67\man，
-$655\text{万}<Y\le 2{,}350\text{万}$ なら62\man である\cite{taikou2026}。
+$655\text{万}<Y\le 2{,}350\text{万}$ なら62\man である\cite{nta}
+（年収2,000\man までの範囲では $Y$ はこれを超えない）。
 人的控除の合計を $P$（配偶者控除38\man，扶養控除38\man，特定扶養控除63\man。
 配偶者控除は本人の所得が900\man を超えると逓減する）とすると，課税所得と税額は
 \begin{equation}
@@ -450,7 +520,8 @@ $655\text{万}<Y\le 2{,}350\text{万}$ なら62\man である\cite{taikou2026}�
   T_R = \bigl\lfloor \max(0,\ Y - S - 430{,}000 - P') \bigr\rfloor_{1000},\qquad
   \text{住民税} = \bigl\lfloor \max(0,\ 0.1\,T_R - A) \bigr\rfloor_{100} + 5{,}000
 \end{equation}
-である。5,000円は均等割と森林環境税，$A$ は調整控除で，所得税と住民税の人的控除額の差の合計を $\Delta$ として
+である。5,000円は均等割4,000円と森林環境税1,000円\cite{soumu}，$A$ は調整控除で，
+所得税と住民税の人的控除額の差の合計を $\Delta$（基礎控除5\man，配偶者控除5\man，扶養控除5\man，特定扶養控除18\man）として
 \begin{equation}
   A=
   \begin{cases}
@@ -458,13 +529,15 @@ $655\text{万}<Y\le 2{,}350\text{万}$ なら62\man である\cite{taikou2026}�
     0.05\,\max\bigl(\Delta-(T_R-2{,}000{,}000),\ 50{,}000\bigr) & T_R > 2{,}000{,}000
   \end{cases}
 \end{equation}
-とする。
+とする\cite{osaka}。$T_R=0$ のときは住民税を0とし，均等割も課さないものとして扱っている。
 
 \paragraph{計算例}
 単身・40歳未満の場合の結果を表\ref{tab:sim}に示す。
 年収600\man では手取りは466.1\man（77.7\%）で，負担の内訳は社会保険料88.3\man，住民税30.7\man，所得税14.9\man の順に大きい。
 個人の負担率は22.3\%で，国民負担率45.7\%の半分ほどである。
 会社が別に負担する社会保険料は90.4\man で，これを含めて見ると負担は額面の外側にも存在する。
+本人と会社の負担の合計224.3\man を，額面に会社負担を加えた人件費690.4\man で割ると32.5\%になる。
+国全体の社会保障負担率が事業主負担を含むことに対応させるなら，個人の側でもこの見方が近い。
 負担率は年収とともに上がり，年収2,000\man では35.0\%になる。
 
 \begin{table}[htbp]
@@ -482,14 +555,17 @@ $655\text{万}<Y\le 2{,}350\text{万}$ なら62\man である\cite{taikou2026}�
 このモデルでは，年収が約665\man（給与所得489\man）を超えると基礎控除の特例加算が42\man から5\man に縮小するため，
 所得税額が不連続に増える。
 年収665\man と666\man を比べると，手取りは約512.8\man から約509.8\man へ約3\man 減る。
-これは大綱の規定をそのまま適用した結果である。
+これは基礎控除の段階\cite{nta}をそのまま適用した結果で，計算の誤りではない。
 
-\section{ホスティング}\label{sec:hosting}
+\section{公開と運用}\label{sec:hosting}
+
+アプリは GitHub Pages と Cloudflare Workers の二つで公開している。
+どちらも静的ファイルをそのまま配信する構成で，サーバー側のプログラムはない。
+先に公開した GitHub Pages を正とし，Cloudflare Workers は同じ内容の第二の公開先としている。
 
 \subsection{GitHub Pages による公開}
 
-アプリは GitHub Pages\cite{ghpages}で公開している。
-GitHub Pages は，リポジトリに置いたファイルをそのまま静的サイトとして配信する仕組みである。
+GitHub Pages\cite{ghpages}は，リポジトリに置いたファイルをそのまま静的サイトとして配信する仕組みである。
 本アプリでは \code{main} ブランチの最上位に \code{index.html} を置き，
 Pages の公開元を「ブランチから配信」（\code{main} の \code{/}）に設定している。
 
@@ -532,14 +608,56 @@ GitHub Pages は，リポジトリの最上位以下のファイルをすべて�
 （\code{.gitignore} のようにドットで始まるファイルは配信されない）。
 リポジトリ自体が公開なので支障はないが，公開したくないファイルはリポジトリに置かないことになる。
 
-\subsection{ほかの公開方法とローカルでの利用}
+\subsection{Cloudflare Workers による公開}
 
-サーバー側の処理がないので，静的ファイルを配信できる環境であればどこにでも置ける。
-\code{index.html} をウェブサーバーの公開ディレクトリにコピーすれば足りる。
-Cloudflare Workers で公開する手順は付録\ref{app:cloudflare}に示す。
-ローカルでは，ファイルをブラウザで直接開けば動作する。
+Cloudflare Workers はプログラムを実行する基盤だが，静的アセットの機能\cite{cfassets}を使えば，ファイルの配信だけにも使える。
+本アプリでは，設定ファイル \code{wrangler.jsonc} で配信するディレクトリを \code{dist} と指定し，
+そこへ \code{index.html} と論文のPDFだけをコピーして，コマンドラインツール Wrangler でデプロイしている。
+\begin{lstlisting}
+mkdir -p dist/paper
+cp index.html dist/
+cp paper/paper.pdf dist/paper/
+npx wrangler deploy
+\end{lstlisting}
+公開URLは \url{https://kklab-tax-burden.katzkawai.workers.dev} である。
+設定項目の意味，認証，事前確認，公開後の応答，更新と取り消し，つまずきやすい点は付録\ref{app:cloudflare}にまとめた。
+
+\subsection{二つの公開先の比較}
+
+二つの公開先の違いを表\ref{tab:hosting}にまとめる。
+大きな違いは，配信される範囲と更新の方法である。
+GitHub Pages はリポジトリをそのまま配信するので設定が要らず，push だけで更新される。
+Cloudflare Workers は公開するファイルを選べるが，更新のたびにデプロイの操作が必要になる（Git 連携を設定すれば自動化できる）。
+二つを併用すると同じ内容が二つのURLで公開されるので，
+\code{index.html} の \code{canonical} と \code{og:url} には正とするURLを書いておく。
+現在は GitHub Pages のURLを指定している。
+
+\begin{table}[htbp]
+  \centering
+  \caption{GitHub Pages と Cloudflare Workers の比較（本アプリの場合）}\label{tab:hosting}
+  {\small
+  \begin{tabular}{p{0.20\linewidth}p{0.35\linewidth}p{0.35\linewidth}}
+    \toprule
+    項目 & GitHub Pages & Cloudflare Workers \\
+    \midrule
+    配信される範囲 & リポジトリの全ファイル & \code{dist} に置いたファイルだけ \\
+    設定ファイル & 不要（公開元の指定のみ） & \code{wrangler.jsonc} \\
+    更新の方法 & \code{main} への push で自動 & \code{wrangler deploy} の実行（Git 連携を設定すれば自動） \\
+    反映までの時間 & ビルドに31〜42秒 & アップロードと公開で10秒足らず \\
+    キャッシュの指定 & 10分 & 毎回再検証 \\
+    既定のURL & \code{USER.github.io/リポジトリ名/} & \code{名前.SUBDOMAIN.workers.dev} \\
+    取り消し & コミットを戻して push & \code{wrangler rollback} \\
+    \bottomrule
+  \end{tabular}}
+\end{table}
+
+\subsection{ローカルでの利用とほかの公開方法}
+
+ローカルでは，\code{index.html} をブラウザで直接開けば動作する。
 インターネットに接続していない場合，スタイルとグラフは読み込めないが，
 数値のカード，表，シミュレーターの計算は動く。
+サーバー側の処理がないので，上の二つ以外でも，静的ファイルを配信できる環境であればどこにでも置ける。
+\code{index.html} をウェブサーバーの公開ディレクトリにコピーすれば足りる。
 
 \subsection{データの更新}
 
@@ -548,6 +666,7 @@ Cloudflare Workers で公開する手順は付録\ref{app:cloudflare}に示す�
 \code{INTL}，\code{MAJOR} を新しい資料の値に書き換える。
 シミュレーターは，料率を定数 \code{SIM} に，控除額を関数にまとめてあるので，制度改正に応じてそこを直す。
 本文中の年度や数値（解説，見出し，出典）も確認が必要である。
+書き換えたあとは，GitHub へ push し，Cloudflare Workers へデプロイし直す。
 手順はリポジトリの \code{README.md} に記してある。
 
 \section{開発過程：Gemini 3.8 Flash と Claude Fable 5.1}\label{sec:ai}
@@ -613,7 +732,8 @@ $100\%$ から国民負担率を引いた54.9\%を「国民手残り（可処分
 対GDP比の説明で欧州諸国を「40〜50\%超」としていたが，対GDP比で50\%を超える国はない。
 日本を「中位」としていたが，35カ国中26位である。
 潜在的国民負担率に加える財政赤字を「国の借金」と説明していたが，加えるのは単年度の赤字である。
-「実質50\%を超えている」という記述は，令和8年度見通しの48.4\%と合わない。
+「実質50\%を超えている」という記述は，プロトタイプが基準にした令和6年度見通し（50.9\%）では成り立つが，
+令和8年度見通しの48.4\%とは合わない。
 
 \paragraph{リンク切れと最新性}
 出典として示していた財務省のページは存在しないURLであった。
@@ -645,7 +765,11 @@ $100\%$ から国民負担率を引いた54.9\%を「国民手残り（可処分
 「国税＋地方税＝租税負担率」「租税負担率＋社会保障負担率＝国民負担率」などの関係が
 四捨五入の範囲で成り立つことを確かめたうえで，アプリのデータとした。
 
-第三に，生成と検証を分けることに意味がある。
+第三に，数値がいつの公表値にもとづくのかを確かめる必要がある。
+プロトタイプの最新値は2年前の公表値であった。
+国民負担率のように毎年改定される統計では，生成された数値が正しい時点のものであっても，すでに古くなっていることがある。
+
+第四に，生成と検証を分けることに意味がある。
 プロトタイプを作ったモデルと，それを点検したモデルは別であり，
 点検は誤りを見つけて直すことを目的に，資料の取得と照合という生成とは異なる作業として行われた。
 ただし修正版もAIの出力であることに変わりはない。
@@ -663,7 +787,14 @@ $100\%$ から国民負担率を引いた54.9\%を「国民手残り（可処分
     スクリプトのエラーと横方向のはみ出しがないこと，期間と分母の切り替え，CSV保存，URLからの入力復元，
     Chart.jsを読み込めない場合の代替表示が動くことを確かめた。
     最初の描画では対GDP比の折れ線が誤って積み上がる不具合が見つかり，修正した。
+  \item \textbf{制度}：シミュレーターの給与所得控除，基礎控除，配偶者控除，扶養控除，所得税の税率を，
+    国税庁の解説（令和8年4月1日現在の法令）\cite{nta}と照合し，一致することを確かめた。
+    住民税の税率・均等割，厚生年金の料率と標準報酬月額の上限も，それぞれの所管機関の解説\cite{soumu,nenkin}と照合した。
   \item \textbf{出典}：出典として掲げたURLがすべて取得できることを確かめた。
+  \item \textbf{公開}：二つの公開先のそれぞれで，ページがエラーなく描画されること，配信されるファイルの範囲が意図どおりであることを確かめた
+    （Cloudflare Workers については付録\ref{app:cloudflare}）。
+  \item \textbf{本稿の表}：付録の年度別データと国際比較データ，表\ref{tab:sim}，表\ref{tab:proto}は，
+    アプリのデータ，計算関数，財務省のPDFからスクリプトで生成し，手で書き写していない。
 \end{itemize}
 
 \section{限界}\label{sec:limits}
@@ -672,13 +803,17 @@ $100\%$ から国民負担率を引いた54.9\%を「国民手残り（可処分
   \item シミュレーターは概算である。賞与，勤務先の健康保険組合や都道府県ごとの料率，
     配偶者特別控除，所得金額調整控除，各種の所得控除・税額控除，住民税の非課税限度額を扱っていない。
     消費税などの間接税の負担も含まない。
-  \item シミュレーターの所得税・住民税は「令和8年度税制改正の大綱」にもとづく。
-    成立した法令の条文とは照合していない。
+  \item 給与所得は算式で求めており，年収660\man 未満で実務に用いられる所得税法別表第五（4,000円刻みの表）とは数千円の差が出ることがある。
+    標準報酬月額も等級に丸めていない。
+  \item 住民税の給与所得控除の特例（令和9・10年度分）は「令和8年度税制改正の大綱」にもとづいており，
+    成立した地方税法の条文とは照合していない。
   \item データは手作業で転記したもので，公表値の改定に自動では追随しない。
     本稿の数値は2026年10月4日時点で確認したものである。
   \item 表示は外部のCDNに依存する。Tailwind CSS のCDN版は開発用途向けとされており\cite{tailwind}，
     長期の安定運用には向かない。
   \item 国民負担率は負担の側だけを見る指標で，本アプリも受益の側（社会保障給付など）を示していない。
+  \item 国際比較は2023年の値で，日本の最新値（2026年度見通し）とは時点が異なる。
+  \item 修正と検証はいずれも生成AIが行ったもので，第三者による点検は受けていない。
 \end{itemize}
 
 \section{拡張の構想}\label{sec:extension}
@@ -713,6 +848,7 @@ GitHub Actions で定期的に実行すれば，財務省の公表にあわせ�
 
 \paragraph{(6) 配信と利用の改善}
 ライブラリをリポジトリに同梱し，スタイルをビルド済みのCSSに置き換えて，CDNへの依存をなくす。
+Cloudflare Workers には Git 連携を設定し，push だけで二つの公開先がそろって更新されるようにする。
 英語版，ダークモード，印刷用の表示を加える。
 授業での利用に向けて，保険料率や税率を動かしたときに国民負担率がどう変わるかを試せる
 シナリオ機能と，演習用の設問を用意する。
@@ -734,7 +870,8 @@ GitHub Actions で定期的に実行すれば，財務省の公表にあわせ�
 \section*{生成AIの利用について}
 
 本アプリのプロトタイプは Gemini 3.8 Flash が，修正版は Claude Fable 5.1 が作成した。
-本稿の草稿の作成にも Claude Fable 5.1 を用いた。内容についての責任は著者にある。
+GitHub Pages と Cloudflare Workers への公開の操作，本稿の草稿と図表の作成にも Claude Fable 5.1 を用いた。
+内容についての責任は著者にある。
 
 \begin{thebibliography}{99}
   \bibitem{mof2026} 財務省（2026）「令和8年度の国民負担率を公表します」2026年3月5日．
@@ -745,6 +882,16 @@ GitHub Actions で定期的に実行すれば，財務省の公表にあわせ�
     \url{https://www.mof.go.jp/policy/budget/topics/futanritsu/20240209.html}
   \bibitem{taikou2026} 財務省「令和8年度税制改正の大綱」．
     \url{https://www.mof.go.jp/tax_policy/tax_reform/outline/fy2026/08taikou_01.htm}
+  \bibitem{nta} 国税庁「タックスアンサー」No.1180 扶養控除，No.1191 配偶者控除，No.1199 基礎控除，
+    No.1410 給与所得控除，No.2260 所得税の税率（令和8年4月1日現在法令等）．
+    \url{https://www.nta.go.jp/taxes/shiraberu/taxanswer/shotoku/1199.htm} ほか
+  \bibitem{soumu} 総務省「個人住民税」．
+    \url{https://www.soumu.go.jp/main_sosiki/jichi_zeisei/czaisei/czaisei_seido/150790_06.html}
+  \bibitem{osaka} 大阪市「税額控除額の種類と計算」．
+    \url{https://www.city.osaka.lg.jp/zaisei/page/0000370599.html}
+  \bibitem{nenkin} 日本年金機構「厚生年金保険の保険料」「保険料額表」．
+    \url{https://www.nenkin.go.jp/service/kounen/hokenryo/hoshu/20150515-01.html}，
+    \url{https://www.nenkin.go.jp/service/kounen/hokenryo/ryogaku/ryogakuhyo/index.html}
   \bibitem{kenpo2026} 全国健康保険協会「令和8年度保険料率」．
     \url{https://www.kyoukaikenpo.or.jp/about/business/insurance_rate/rate_prefectures/r08/index.html}
   \bibitem{mhlw2026} 厚生労働省「令和8（2026）年度 雇用保険料率のご案内」．
@@ -820,7 +967,8 @@ URLは \url{https://kklab-tax-burden.katzkawai.workers.dev} である。
 Workers はもともとプログラムを実行する基盤だが，静的アセットの機能\cite{cfassets}を使うと，
 Worker のスクリプトを書かずにファイルだけを配信できる。
 本アプリにはサーバー側の処理がないので，この構成で足りる。
-以下では，2026年10月4日に実際に行ったデプロイの手順を，設定，準備，実行，確認，更新の順に記す。
+第\ref{sec:hosting}節では要点だけを述べたので，
+ここでは2026年10月4日に実際に行ったデプロイの手順を，設定，準備，実行，確認，更新の順に記す。
 操作は Claude Fable 5.1 が Wrangler を実行して行い，著者はブラウザでの認証の承認だけを行った。
 
 \subsection{構成}
@@ -994,31 +1142,9 @@ Cloudflare で管理しているドメインがあれば，そのサブドメイ
     \code{npx wrangler@latest} として新しい版を使うか，基準日を古い日付にすれば解消する。
 \end{itemize}
 
-\subsection{GitHub Pages との比較}
+\subsection{GitHub Pages との関係}
 
-二つの公開先の違いを表\ref{tab:hosting}にまとめる。
-二つは併用でき，本アプリは両方で公開している。
-同じ内容が二つのURLで公開されることになるので，
-\code{index.html} の \code{canonical} と \code{og:url} には正とするURLを書いておく。
-現在は GitHub Pages のURLを指定している。
+GitHub Pages との違いは第\ref{sec:hosting}節の表\ref{tab:hosting}にまとめた。
 Tailwind CSS，Chart.js，フォントをCDNから読み込む点は，どちらの公開先でも変わらない。
-
-\begin{heretable}
-  \captionof{table}{GitHub Pages と Cloudflare Workers の比較（本アプリの場合）}\label{tab:hosting}
-  {\small
-  \begin{tabular}{p{0.20\linewidth}p{0.35\linewidth}p{0.35\linewidth}}
-    \toprule
-    項目 & GitHub Pages & Cloudflare Workers \\
-    \midrule
-    配信される範囲 & リポジトリの全ファイル & \code{dist} に置いたファイルだけ \\
-    設定ファイル & 不要（公開元の指定のみ） & \code{wrangler.jsonc} \\
-    更新の方法 & \code{main} への push で自動 & \code{wrangler deploy} の実行（Git 連携を設定すれば自動） \\
-    反映までの時間 & ビルドに31〜42秒 & アップロードと公開で10秒足らず \\
-    キャッシュの指定 & 10分 & 毎回再検証 \\
-    既定のURL & \code{USER.github.io/リポジトリ名/} & \code{名前.SUBDOMAIN.workers.dev} \\
-    取り消し & コミットを戻して push & \code{wrangler rollback} \\
-    \bottomrule
-  \end{tabular}}
-\end{heretable}
 
 \end{document}
